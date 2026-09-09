@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 사용법과 지원 안내
+    url: https://github.com/Hdev-x/Bubit/blob/main/SUPPORT.md
+    about: 실행 방법, 알려진 제한과 문제 신고에 필요한 정보를 확인하세요.
+  - name: 보안 취약점 비공개 신고
+    url: https://github.com/Hdev-x/Bubit/security/advisories/new
+    about: 인증·데이터 접근·자격증명 노출 문제는 비공개로 알려주세요.

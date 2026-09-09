@@ -84,7 +84,7 @@ npm run dev:desktop
 
 Desktop: `http://localhost:5174/web/`
 
-회원가입 후 로그인하면 mapper가 `members` table을 사용합니다. 거래소 API key는 server에서 암호화한 뒤 `bot_api_keys`에 저장되며 browser나 repository에 저장하면 안 됩니다.
+새 계정은 PC 화면의 로그인 → 회원가입에서 생성합니다. Mobile에서는 같은 계정으로 로그인합니다. mapper는 `members` table을 사용합니다. 거래소 API key는 server에서 암호화한 뒤 `bot_api_keys`에 저장되며 browser나 repository에 저장하면 안 됩니다. 현재 지원 범위는 [사용 가이드](USER-GUIDE.md)를 참고하세요.
 
 ## 검증 범위
 

@@ -1,0 +1,41 @@
+name: 버그 신고
+description: 실행 또는 사용 중 발생한 오류를 알려주세요.
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        이 Issue는 공개됩니다. 비밀번호·JWT·거래소 자격증명·계좌 정보·개인정보를 포함하지 마세요.
+        보안 취약점은 [비공개 신고](https://github.com/Hdev-x/Bubit/security/advisories/new)를 이용하세요.
+  - type: input
+    id: version
+    attributes:
+      label: 버전 또는 commit
+      description: 버전 태그가 없으면 git rev-parse --short HEAD 결과를 적어주세요.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 사용 환경
+      description: PC/Mobile, 운영체제·브라우저 버전, 거래소·현물/선물·종목·시간봉, 발생 시각을 적어주세요. 해당하지 않는 항목은 생략할 수 있습니다.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 재현 순서
+      description: 어떤 화면에서 무엇을 누르면 발생하는지 순서대로 적어주세요.
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: 기대한 결과와 실제 결과
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 화면·로그 등 참고 자료
+      description: 민감한 정보를 가린 자료만 첨부해주세요.

@@ -11,8 +11,9 @@
 
 <p align="center">
   <a href="docs/SETUP.md">시작하기</a> ·
-  <a href="#주요-기능">주요 기능</a> ·
-  <a href="https://github.com/Hdev-x/Bubit/issues">피드백</a>
+  <a href="docs/USER-GUIDE.md">사용 가이드</a> ·
+  <a href="CHANGELOG.md">업데이트</a> ·
+  <a href="SUPPORT.md">피드백</a>
 </p>
 
 <p align="center">
@@ -48,15 +49,19 @@ cd Bubit
 로컬 실행을 마치면 다음 주소에서 사용할 수 있습니다.
 
 - **PC:** [localhost:5174/web/](http://localhost:5174/web/) — 로그인 전에도 실시간 마켓을 살펴볼 수 있습니다.
-- **Mobile:** [localhost:5173/mobile/](http://localhost:5173/mobile/) — 회원가입·로그인 후 사용합니다. PC 브라우저에서도 Mobile 화면을 열 수 있습니다.
+- **Mobile:** [localhost:5173/mobile/](http://localhost:5173/mobile/) — PC 화면에서 가입한 계정으로 로그인해 사용합니다. PC 브라우저에서도 Mobile 화면을 열 수 있습니다.
 
-처음에는 마켓에서 거래소와 종목을 고른 뒤 차트에서 시간봉과 지표를 바꿔보세요. 계좌 정보가 필요한 경우에만 Bitget을 연결하면 됩니다.
+처음에는 마켓에서 거래소와 종목을 고른 뒤 차트에서 시간봉과 지표를 바꿔보세요. 계좌 정보가 필요한 경우에만 Bitget을 연결하면 됩니다. 자세한 이용 범위는 [사용 가이드](docs/USER-GUIDE.md)에 있습니다.
 
 ## Beta 안내와 피드백
 
 Beta 기간에는 기능과 화면을 계속 다듬습니다. 거래소 응답이나 네트워크 상태에 따라 시세 갱신이 지연될 수 있으며, 실제 기기에서의 차트 전환과 재연결을 점검하고 있습니다.
 
-문제나 제안은 [GitHub Issues](https://github.com/Hdev-x/Bubit/issues)에 남겨주세요. 사용한 기기·브라우저, 거래소·종목·시간봉, 재현 순서를 함께 알려주시면 확인에 도움이 됩니다. 첨부 화면에서는 계좌 정보와 API 키 등 민감한 내용을 가려주세요.
+사용자에게 보이는 변경은 [변경 이력](CHANGELOG.md)에 계속 쌓습니다. 아직 버전 태그·Release는 없으며, 발행한 버전은 [GitHub Releases](https://github.com/Hdev-x/Bubit/releases)에도 게시합니다.
+
+- [문제 신고·기능 제안](SUPPORT.md) — 일반 피드백은 공개 Issue로 받습니다.
+- [보안 문제 신고](SECURITY.md) — 취약점은 비공개 신고 경로로 받습니다.
+- [데이터 저장과 삭제](docs/DATA.md) — 로컬 DB·브라우저 저장 정보와 현재 삭제 가능한 범위를 안내합니다.
 
 ## 개발 문서
 
@@ -64,7 +69,8 @@ React 19 · TypeScript · Vite · Java 21 · Spring Boot 3 · MyBatis · Postgre
 
 - [로컬 실행과 테스트](docs/SETUP.md)
 - [프로젝트 구조와 데이터 흐름](docs/ARCHITECTURE.md)
-- [차트·실시간 데이터 트러블슈팅](docs/TROUBLESHOOTING.md)
+- [기술 문제 해결 기록](docs/TROUBLESHOOTING.md)
+- [버전과 릴리즈 관리](docs/RELEASING.md)
 - [외부 라이브러리와 출처](docs/THIRD_PARTY.md)
 
 Bubit 자체의 별도 오픈소스 라이선스는 아직 지정하지 않았습니다.
