@@ -1,0 +1,27 @@
+name: 기능 제안
+description: 사용하면서 필요한 기능이나 개선점을 제안해주세요.
+title: "[Feature] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        이 Issue는 공개됩니다. 비밀번호·JWT·거래소 자격증명·계좌 정보·개인정보를 포함하지 마세요.
+        보안 취약점은 [비공개 신고](https://github.com/Hdev-x/Bubit/security/advisories/new)를 이용하세요.
+  - type: textarea
+    id: problem
+    attributes:
+      label: 어떤 상황에서 불편한가요?
+      description: 해결하려는 문제와 사용 상황을 설명해주세요. 개인정보나 계좌 정보는 넣지 마세요.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: 원하는 결과
+      description: 개선 후 어떤 일을 할 수 있으면 좋을지 적어주세요.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: 대안·참고 자료

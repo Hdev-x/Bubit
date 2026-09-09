@@ -4,7 +4,9 @@ Desktop(`/web/`)과 Mobile(`/mobile/`) 두 진입점을 가진 React·Vite 앱�
 
 - [전체 실행 방법](../../docs/SETUP.md)
 - [구조와 데이터 흐름](../../docs/ARCHITECTURE.md)
-- [트러블슈팅](../../docs/TROUBLESHOOTING.md)
+- [기술 문제 해결 기록](../../docs/TROUBLESHOOTING.md)
+- [사용 가이드](../../docs/USER-GUIDE.md)
+- [변경 이력](../../CHANGELOG.md)
 
 ```bash
 npm ci
