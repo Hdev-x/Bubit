@@ -1,64 +1,70 @@
-# Bubit · Beta
+<p align="center">
+  <img src="apps/web/public/botz-icon.svg" alt="Bubit 로고" width="80" height="80" />
+</p>
 
-[![CI](https://github.com/Hdev-x/Bubit/actions/workflows/ci.yml/badge.svg)](https://github.com/Hdev-x/Bubit/actions/workflows/ci.yml)
+<h1 align="center">Bubit <sup>Beta</sup></h1>
 
-**PC와 모바일에서 암호화폐 시세·차트·호가를 살펴보는 개인 포트폴리오 프로젝트입니다.**
-React와 Spring Boot로 만들었으며, 실시간 데이터 처리와 공용 UI 구조를 중심으로 개선했습니다.
-현재는 Beta 소스를 공개한 단계이며 외부 서비스 주소는 아직 제공하지 않습니다.
+<p align="center">
+  <strong>시세 확인부터 차트 분석까지, PC와 모바일에서.</strong><br />
+  여러 거래소의 암호화폐 마켓과 차트를 한곳에서 살펴보세요.
+</p>
+
+<p align="center">
+  <a href="docs/SETUP.md">시작하기</a> ·
+  <a href="#주요-기능">주요 기능</a> ·
+  <a href="https://github.com/Hdev-x/Bubit/issues">피드백</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/Hdev-x/Bubit/actions/workflows/ci.yml"><img src="https://github.com/Hdev-x/Bubit/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+</p>
+
+> **Beta 소스 공개 중** · 현재는 로컬에서 실행할 수 있으며, 외부 접속용 서비스 주소는 준비 중입니다.
 
 ## 주요 기능
 
-- 거래소별 시세·캔들·호가 조회, 관심종목과 종목 검색
-- Desktop 다중 패널 차트와 Mobile 전용 화면·PWA
-- 차트 지표, SMC·하모닉·파동 분석, 드로잉 도구
-- 회원 인증과 Bitget 계좌의 자산·포지션 조회
+| 기능 | 할 수 있는 일 |
+| --- | --- |
+| 실시간 마켓 | 거래소별 시세와 호가를 확인하고, 종목을 검색하거나 관심종목으로 관리합니다. |
+| 차트 분석 | 시간봉을 전환하며 지표, SMC·하모닉·파동 분석과 드로잉 도구를 사용합니다. |
+| PC·Mobile 화면 | PC에서는 차트·시세·호가 패널을 함께 보고, Mobile에서는 전용 탭과 시트로 마켓·차트·자산을 확인합니다. |
+| 계좌 조회 | Bitget 계좌를 연결해 자산과 포지션을 확인합니다. 계좌 연동은 선택 사항입니다. |
 
-계좌 연동은 선택 사항입니다. 공개본에는 봇 워커·자동매매·모의투자·관리자 기능을 포함하지 않습니다.
-Beta 거래 화면은 계좌 조회 용도이며 실주문 기능을 제공하지 않습니다.
+**시세·차트 지원 거래소:** Binance · Bitget · Upbit · Bithumb
 
-## 기술과 구조
+계좌 연동은 Bitget만 지원합니다. Beta의 거래 화면은 조회용이며 실제 주문·자동매매 기능은 제공하지 않습니다.
 
-| 경로 | 역할 | 주요 기술 |
-| --- | --- | --- |
-| `apps/web` | Desktop·Mobile UI, 차트와 클라이언트 상태 | React 19, TypeScript, Vite, Vitest |
-| `apps/api` | 인증, 거래소 REST 프록시·WebSocket 중계, 계좌 조회 | Java 21, Spring Boot 3, MyBatis, PostgreSQL |
-| `shared` | UI와 분리된 차트 분석 계산 | TypeScript |
+차트 지표·분석 도구는 Mobile에서 사용할 수 있으며, 현재 PC의 지표 기능은 관리자 계정으로 제한됩니다.
 
-[구조와 데이터 흐름](docs/ARCHITECTURE.md) · [실행 방법](docs/SETUP.md) · [트러블슈팅](docs/TROUBLESHOOTING.md)
+## 시작하기
 
-## 빠른 검증
-
-Node.js 22, Java 21, Python 3가 필요합니다. 아래 검증은 운영 DB나 거래소 API 키 없이 실행합니다.
+Node.js 22, Java 21, PostgreSQL이 필요합니다. 저장소를 내려받은 뒤 [로컬 실행 가이드](docs/SETUP.md)에 따라 DB와 API를 설정하고 Web을 실행하세요.
 
 ```bash
-cd apps/web
-npm ci
-npm run lint
-npm test
-npm run build
-npm run build:desktop
-npm run check:css
-
-cd ../api
-./gradlew test --no-daemon
-./gradlew bootWar -x test --no-daemon
+git clone https://github.com/Hdev-x/Bubit.git
+cd Bubit
 ```
 
-앱 실행에는 별도 로컬 PostgreSQL과 서버 설정이 필요합니다. [설정 예제와 실행 순서](docs/SETUP.md)를 참고하세요.
+로컬 실행을 마치면 다음 주소에서 사용할 수 있습니다.
 
-## 개선한 문제
+- **PC:** [localhost:5174/web/](http://localhost:5174/web/) — 로그인 전에도 실시간 마켓을 살펴볼 수 있습니다.
+- **Mobile:** [localhost:5173/mobile/](http://localhost:5173/mobile/) — 회원가입·로그인 후 사용합니다. PC 브라우저에서도 Mobile 화면을 열 수 있습니다.
 
-- 종목·시간봉을 빠르게 바꾸면 이전 요청이 늦게 도착해 새 화면을 덮는 문제
-- WebSocket으로 갱신된 현재 봉을 늦은 REST 응답이 되돌리는 문제
-- 차트 표시가 보조 데이터 응답을 기다리며 지연되는 문제
-- Desktop·Mobile CSS 중복과 분리 과정의 스타일 우선순위 회귀
+처음에는 마켓에서 거래소와 종목을 고른 뒤 차트에서 시간봉과 지표를 바꿔보세요. 계좌 정보가 필요한 경우에만 Bitget을 연결하면 됩니다.
 
-[트러블슈팅 문서](docs/TROUBLESHOOTING.md)에 원인, 해결 방식, 테스트 범위와 남은 확인 사항을 정리했습니다.
+## Beta 안내와 피드백
 
-## 현재 범위
+Beta 기간에는 기능과 화면을 계속 다듬습니다. 거래소 응답이나 네트워크 상태에 따라 시세 갱신이 지연될 수 있으며, 실제 기기에서의 차트 전환과 재연결을 점검하고 있습니다.
 
-자동 테스트와 빌드 검증을 제공하며, 실제 기기·네트워크에서의 전환과 재연결 확인은 계속 진행 중입니다.
-공개 소스 검증 완료를 운영 서비스 배포나 보안 감사 완료로 보지 않습니다.
+문제나 제안은 [GitHub Issues](https://github.com/Hdev-x/Bubit/issues)에 남겨주세요. 사용한 기기·브라우저, 거래소·종목·시간봉, 재현 순서를 함께 알려주시면 확인에 도움이 됩니다. 첨부 화면에서는 계좌 정보와 API 키 등 민감한 내용을 가려주세요.
 
-이 저장소는 검토된 소스를 별도 이력으로 공개합니다. 개발 작업 기록, 로컬 환경설정, 사용자 데이터는 포함하지 않습니다.
-프로젝트 자체의 별도 오픈소스 라이선스는 아직 지정하지 않았습니다. 외부 라이브러리 고지는 [THIRD_PARTY](docs/THIRD_PARTY.md)에 정리했습니다.
+## 개발 문서
+
+React 19 · TypeScript · Vite · Java 21 · Spring Boot 3 · MyBatis · PostgreSQL
+
+- [로컬 실행과 테스트](docs/SETUP.md)
+- [프로젝트 구조와 데이터 흐름](docs/ARCHITECTURE.md)
+- [차트·실시간 데이터 트러블슈팅](docs/TROUBLESHOOTING.md)
+- [외부 라이브러리와 출처](docs/THIRD_PARTY.md)
+
+Bubit 자체의 별도 오픈소스 라이선스는 아직 지정하지 않았습니다.
