@@ -6,6 +6,5 @@
     .beta { fill: #656d76; }
     @media (prefers-color-scheme: dark) { .name { fill: #f0f6fc; } .beta { fill: #9198a1; } }
   </style>
-  <text class="name" x="120" y="34" text-anchor="middle" font-size="32" font-weight="600">Bubit</text>
-  <text class="beta" x="174" y="15" font-size="12" font-weight="500">Beta</text>
+  <text class="name" x="120" y="34" text-anchor="middle" font-size="32" font-weight="600">Bubit<tspan class="beta" dx="4" dy="-19" font-size="12" font-weight="500">Beta</tspan></text>
 </svg>
