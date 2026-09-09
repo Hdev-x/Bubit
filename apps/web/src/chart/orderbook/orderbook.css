@@ -1,0 +1,243 @@
+/* orderbook — TradeOrderbook(양 앱 공용 호가창) 전용 규칙. d01에서 app/mobile/components/trade/trade.css L273~424를 그대로 옮기고, d02에서 두 셸에 나뉘어 있던 .orderbook·.book-row 등 override를 --ob-* 변수로 합쳤다(규칙 순서는 원본 순). 클래스 이름·값은 그대로.*/
+
+.arrow-down {
+  color: #848e9c;
+  font-size: 10px;
+}
+/* 셸 규칙 통합 — : mobile.css·desktop.css에 나뉘어 있던 호가창 override를 한 곳으로. 앱별 값 차이는 --ob-* 변수(기본값 = Mobile, Desktop은 desktop.css :root가 정의).*/
+.orderbook {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: var(--ob-flex, 0 1 auto);
+}
+.funding-rate-countdown {
+  font-size: 10px;
+  color: #848e9c;
+  line-height: 1.3;
+  margin-bottom: 7px;
+  text-align: right;
+  width: 100%; /* 풀폭으로 늘려 우측을 호가창 라인(거터)에 정렬 */
+  display: inline-block;
+  transform: scaleX(0.95); /* 트레이드 텍스트 가로 95% 압축 */
+  transform-origin: right; /* 우측 정렬이라 기준점을 오른쪽으로 */
+}
+.col-price,
+.col-qty {
+  display: inline-block;
+  transform: scaleX(0.95);
+  transform-origin: left;
+}
+.col-qty {
+  text-align: right;
+  transform-origin: var(--ob-qty-origin, left);
+}
+.book-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: var(--ob-row-h, 20px);
+  position: relative;
+  overflow: hidden;
+}
+.gauge-red,
+.gauge-green {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  z-index: 1;
+  opacity: 0.28; /* 깊이 막대 — Bitget처럼 진하게 */
+  border-radius: 0;
+}
+.current-price-val {
+  font-size: 17px;
+  font-weight: 700;
+  color: #eaecef; /* 기본(변동 없음) = 흰색 */
+  display: inline-block;
+  transform: scaleX(0.95); /* 글자 가로 95% */
+  transform-origin: left;
+  font-variant-numeric: var(--ob-num-variant, normal);
+}
+.current-price-val.up { color: #0ecb81; }   /* 상승 = 초록 */
+.current-price-val.down { color: #f6465d; } /* 하락 = 빨강 */
+.current-price-val.flat { color: #eaecef; } /* 보합 = 흰색 */
+.market-price-val {
+  font-size: 11px;
+  color: #848e9c;
+  margin-top: 2px;
+  display: inline-block;
+  transform: scaleX(0.95);
+  transform-origin: left;
+  font-variant-numeric: var(--ob-num-variant, normal);
+}
+.ratio-buy {
+  color: #0ecb81;
+  font-weight: 700;
+  display: inline-block;
+  transform: scaleX(0.95);
+  transform-origin: left;
+}
+.ratio-sell {
+  color: #f6465d;
+  font-weight: 700;
+  display: inline-block;
+  transform: scaleX(0.95);
+  transform-origin: var(--ob-ratio-sell-origin, left);
+}
+/* 오더북 하단 컨트롤 */
+.orderbook-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: var(--ob-footer-mt, auto);
+  padding-top: var(--ob-footer-pt, 12px);
+}
+
+.funding-value {
+  color: #eaecef;
+  font-weight: 600;
+}
+
+.orderbook-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9px;
+  color: #848e9c;
+  margin-bottom: 6px;
+}
+
+.book-side {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.book-row span,
+.book-row strong {
+  z-index: 2;
+  font-size: 10px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  display: inline-block;
+  transform: scaleX(0.95); /* 글자 가로 폭 95% (자간 아님, 글리프 자체를 가로 축소) */
+}
+
+.price-red {
+  color: #f6465d;
+  transform-origin: left;
+}
+
+.price-green {
+  color: #0ecb81;
+  transform-origin: left;
+}
+
+.qty-val {
+  color: #b7bdc6; /* Bitget — 수량은 흰색 아닌 muted 회색 */
+  text-align: right;
+  transform-origin: right;
+}
+
+/* 호가 로딩 스켈레톤 행 — .book-row(height:20px)를 그대로 써 높이 동일, 점프 없음 */
+.book-row-skel {
+  justify-content: space-between;
+}
+
+.bk-skel-price,
+.bk-skel-qty {
+  height: 9px;
+  border-radius: 3px;
+}
+
+.bk-skel-price { width: 44px; }
+
+.bk-skel-qty { width: 52px; }
+
+.gauge-red {
+  background: #f6465d;
+}
+
+.gauge-green {
+  background: #0ecb81;
+}
+
+/* 현재가 / 시장가 영역 */
+.mark-price {
+  padding: 6px 0;
+  display: flex;
+  flex-direction: column;
+  margin: 5px 0;
+}
+
+.price-arrow-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between; /* 가격 좌 / 화살표 우 */
+}
+
+.arrow-next {
+  color: #848e9c;
+  font-size: 12px;
+}
+
+/* 강도 비율 바 */
+.book-ratio {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10px;
+  margin-top: 8px;
+}
+
+.ratio-bar {
+  flex: 1;
+  height: 3px;
+  border-radius: 99px;
+  display: flex;
+  overflow: hidden;
+  margin: 0 6px;
+}
+
+.bar-buy {
+  background: #0ecb81;
+  height: 100%;
+}
+
+.bar-sell {
+  background: #f6465d;
+  height: 100%;
+}
+
+.ob-filter-btn {
+  color: #848e9c;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  /* 아이콘을 호가창 왼쪽 라인(가격 텍스트)에 맞춤 */
+  justify-content: flex-start;
+  /* svg 내부 path 여백(viewBox 4/24) 보정 */
+  margin-left: -2px;
+}
+
+.ob-decimals-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: #202126;
+  color: #eaecef;
+  border: 0;
+  border-radius: 4px;
+  min-width: 112px;
+  height: 20px;
+  justify-content: space-between;
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}

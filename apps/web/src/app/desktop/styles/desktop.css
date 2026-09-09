@@ -1,0 +1,132 @@
+:root {
+  /* 올블랙 + 모바일 디자인 토큰 (mobile styles.css 기준) */
+  --bg:        #000000;       /* 페이지 배경 */
+  --sidebar:   #050505;       /* 헤더 */
+  --surface:   #0c0c0c;       /* 카드/패널 1단계 */
+  --surface2:  #131313;       /* 인레이 (스프레드, 호버, 포지션 카드 등) */
+  --chart-bg:  #060606;
+  --border:    transparent;
+  --border2:   transparent;
+  /* 모바일 텍스트 톤 */
+  --text:      #eaecef;       /* 본문 흰색 */
+  --text2:     #b7bdc6;       /* 보조 텍스트 */
+  --text3:     #8a8c90;       /* 라벨/희미한 텍스트 */
+  --muted:     #8b95a1;       /* 근사치 텍스트 (≈ ...) */
+  --blue:      #3182F6;
+  /* 모바일 등락 색 (바이낸스 컨벤션 — 그린=up, 레드=down) */
+  --up:        #0ecb81;
+  --down:      #f6465d;
+  /* 호가창(chart/orderbook/orderbook.css) Desktop 값 —, 기본값(Mobile)과 다른 것만*/
+  --ob-flex: 1;
+  --ob-row-h: 18px;               /* 20→18 (세로 ~90% 압축) */
+  --ob-num-variant: tabular-nums;
+  --ob-qty-origin: right;
+  --ob-ratio-sell-origin: right;
+  --ob-footer-mt: 12px;
+  --ob-footer-pt: 0;
+  --radius:    12px;
+  --gap:       12px;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  /* 모바일(styles.css)과 동일한 폰트 스택·렌더링 — 두께/자형 일치 */
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  font-size: 13px;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-synthesis: none;
+}
+/* ── 헤더 ── */
+.header {
+  display: flex;
+  align-items: center;
+  /* 좌 12 / 우 12(--gap) — 차트 왼쪽 여백 0에 맞춰 좌측을 그만큼(12px) 줄임 */
+  padding: 0 var(--gap) 0 12px;
+  background: #070707;
+  border-bottom: 1px solid #101010;
+  gap: 20px;
+  height: 56px;
+  flex: 0 0 56px;
+  min-width: 0;
+}
+/* 로고 — 모바일 로봇 마크만 */
+.header-logo { height: 40px; width: 40px; display: block; flex-shrink: 0; position: relative; top: 3px; left: -7px; }
+.paper-toggle.on { background: #f0b90b; border-color: #f0b90b; color: #101114; }
+.paper-order-open.on { background: #fff; border-color: #fff; color: #101114; }
+.bbo-button.active { color: #fff; border-color: rgba(255,255,255,0.85); } /* 시장가 미리보기/모드 — 진한 흰 테두리 */
+/* 시장가 모드: 가격 입력값만 흐리게 잠김(좌측 시장가 버튼은 또렷) */
+.trade-input-wrapper.locked .val-input { opacity: 0.45; cursor: not-allowed; }
+.paper-oo-dir.long { color: var(--up, #0ecb81); }
+.paper-oo-dir.short { color: var(--down, #f6465d); }
+.wm-divider-both { padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.08); }
+/* 플로팅 본문 높이는 인라인 style(행수×54)로 지정 — 하단 핸들로 5~15행 리사이즈. 넘치면 .wm-list 스크롤 */
+.watch-dock .watch-body { flex: 1; }
+/* 왼쪽 도킹 컬럼 — 탑바 아래 본문(sub-header+차트)만 오른쪽으로 민다. 사이드바처럼 width 슬라이드. */
+.watch-dock {
+  width: 0; min-width: 0; flex-shrink: 0; overflow: hidden;
+  display: flex; flex-direction: column;
+  background: #000; /* 도킹 시 배경 검은색 */
+  transition: width 0.42s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.watch-dock.open { width: 300px; border-right: 1px solid rgba(255,255,255,0.06); }
+/* ── 본문 (메인 레이아웃 + 우측 사이드바 패널 + 아이콘 레일) — 헤더 아래 풀높이 채움 */
+.body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+}
+.si-btn svg.si-bolt { width: 21px; height: 21px; }
+
+/* ── 차트 패널 ── */
+.sub-header .symbol-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+/* 이름 행: 종목명 + Perpetual 뱃지 + 거래소 뱃지 */
+.sub-header .symbol-selector { display: flex; align-items: center; gap: 5px; }
+.sub-header .symbol-selector h1 { font-size: 16px; font-weight: 700; margin: 0; color: #eaecef; display: inline-block; transform: scaleX(0.95); transform-origin: left; letter-spacing: -0.2px; }
+.sub-header .trade-exchange-badge {
+  display: inline-flex; align-items: center; gap: 2px;
+  padding: 0 5px 0 3px; border-radius: 4px;
+  background: rgba(0, 240, 255, 0.08); color: #00f0ff;
+  font-size: 9px; font-weight: 600; line-height: 16px;
+}
+.sub-header .trade-exchange-logo { display: inline-block; flex: 0 0 auto; width: 11px; height: 11px; }
+.sub-header .trade-exchange-name { position: relative; top: -0.5px; }
+.chart-dd-btn:hover,
+.chart-dd-btn.active { color: var(--text); background: rgba(255, 255, 255, 0.06); }
+.draw-act-btn.danger:hover { color: #f6465d; background: rgba(246, 70, 93, 0.1); }
+.draw-obj-btn.danger:hover { color: #f6465d; }
+.wdt-fb-btn.danger:hover { color: #f6465d; background: rgba(246, 70, 93, 0.1); }
+.wdt-level-row input[type='checkbox'] { width: 14px; height: 14px; accent-color: #2962ff; flex: none; }
+.settings-panel .settings-sheet-content { max-height: 62vh; padding: 4px 16px 20px; }
+/* 그룹 내부 divider 위/아래 자체 padding은 없음 — 그룹 padding이 담당 */
+.view-group > .tas-divider { margin: 0 0 12px; }
+
+.market-chip.active { background: var(--blue); color: #fff; }
+.market-row.selected { background: var(--surface2); }
+.market-row .sym { font-size: 13px; font-weight: 700; color: var(--text); }
+.market-row .name { font-size: 11px; color: var(--text3); margin-top: 2px; }
+.market-row .px { text-align: right; font-size: 13px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+.chat-msg .meta {
+  display: flex; align-items: baseline; gap: 6px;
+  font-size: 11px;
+}
+.chat-msg .meta .nick { color: var(--text); font-weight: 700; }
+.chat-msg .meta .time { color: var(--text3); }
+/* 가로 거터: 300px 사이드바 → 좌우 12px로 통일 */
+@keyframes wmListFade { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+
+/* 로그인 ↔ 회원가입 진입 슬라이드(+페이드). 회원가입=오른쪽에서, 로그인(뒤로)=왼쪽에서. */
+@keyframes web-auth-from-right { from { opacity: 0; transform: translateX(34px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes web-auth-from-left  { from { opacity: 0; transform: translateX(-34px); } to { opacity: 1; transform: translateX(0); } }
+.wps-stat-v.up { color: var(--up); }
+.wps-stat-v.down { color: var(--down); }
+.wps-dir.long { background: rgba(14, 203, 129, 0.15); color: var(--up); }
+.wps-dir.short { background: rgba(246, 70, 93, 0.15); color: var(--down); }
+.wps-cell.up { color: var(--up); }
+.wps-cell.down { color: var(--down); }
+
+.strat-subtab.active { background: rgba(49,130,246,0.1); color: #3182f6; border-color: rgba(49,130,246,0.25); }
+

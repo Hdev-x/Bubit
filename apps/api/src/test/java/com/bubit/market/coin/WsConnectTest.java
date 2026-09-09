@@ -1,0 +1,91 @@
+package com.bubit.market.coin;
+
+import org.junit.jupiter.api.Test;
+
+import java.net.http.WebSocket;
+import java.nio.ByteBuffer;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+
+class WsConnectTest {
+
+    /** 서비스 listener 대역 — 몇 번 호출됐는지만 센다. */
+    private static final class CountingListener implements WebSocket.Listener {
+        final AtomicInteger opens = new AtomicInteger();
+        final AtomicInteger texts = new AtomicInteger();
+        final AtomicInteger closes = new AtomicInteger();
+        final AtomicInteger errors = new AtomicInteger();
+        @Override public void onOpen(WebSocket ws) { opens.incrementAndGet(); }
+        @Override public CompletionStage<?> onText(WebSocket ws, CharSequence d, boolean last) { texts.incrementAndGet(); return null; }
+        @Override public CompletionStage<?> onClose(WebSocket ws, int code, String reason) { closes.incrementAndGet(); return null; }
+        @Override public void onError(WebSocket ws, Throwable t) { errors.incrementAndGet(); }
+    }
+
+    @Test
+    void 정상_경로에서는_모든_이벤트를_그대로_위임한다() {
+        CountingListener inner = new CountingListener();
+        WsConnect.Attempt g = new WsConnect.Attempt(inner);
+        WebSocket ws = mock(WebSocket.class);
+        g.onOpen(ws);
+        g.onText(ws, "x", true);
+        g.onPing(ws, ByteBuffer.allocate(0));
+        g.onClose(ws, 1000, "bye");
+        g.onError(ws, new RuntimeException("e"));
+        assertEquals(1, inner.opens.get());
+        assertEquals(1, inner.texts.get());
+        assertEquals(1, inner.closes.get());
+        assertEquals(1, inner.errors.get());
+        verify(ws, never()).abort();
+    }
+
+    @Test
+    void 타임아웃으로_포기한_뒤_늦게_열린_유령_소켓은_abort하고_서비스에_넘기지_않는다() {
+        // : 예전 코드는 future.cancel 뒤 thenAccept(abort)를 걸었는데 취소된 future는 그 콜백을 실행하지 않는다.
+        CountingListener inner = new CountingListener();
+        WsConnect.Attempt g = new WsConnect.Attempt(inner);
+        g.abandon();
+        WebSocket ghost = mock(WebSocket.class);
+        g.onOpen(ghost);
+        g.onText(ghost, "late", true);
+        g.onClose(ghost, 1006, "");
+        g.onError(ghost, new RuntimeException("late"));
+        verify(ghost).abort();
+        assertTrue(g.isAbandoned());
+        assertEquals(0, inner.opens.get() + inner.texts.get() + inner.closes.get() + inner.errors.get(),
+                "같은 서비스 listener가 두 소켓의 이벤트를 받지 않는다");
+    }
+
+    @Test
+    void 열린_뒤에_포기하면_이미_받은_소켓을_abort한다() {
+        // : 타임아웃 처리 직전에 onOpen이 먼저 통과한 소켓은 플래그만으로는 정리되지 않았다.
+        CountingListener inner = new CountingListener();
+        WsConnect.Attempt g = new WsConnect.Attempt(inner);
+        WebSocket late = mock(WebSocket.class);
+        g.onOpen(late);                 // 정상 위임됨(서비스는 구독까지 했을 수 있다)
+        assertEquals(1, inner.opens.get());
+        g.abandon();                    // open()이 타임아웃으로 포기
+        verify(late).abort();
+        g.onText(late, "x", true);
+        g.onClose(late, 1000, "");
+        assertEquals(0, inner.texts.get() + inner.closes.get(), "포기 뒤 이벤트는 차단");
+    }
+
+    @Test
+    void 실제_WebSocket_구현으로_포기_뒤_소켓이_abort되고_전송_실패가_관찰된다() {
+        CountingListener inner = new CountingListener();
+        WsConnect.Attempt g = new WsConnect.Attempt(inner);
+        FakeWebSocket ws = new FakeWebSocket();
+        g.onOpen(ws);
+        g.abandon();
+        assertTrue(ws.aborted, "포기 시 이미 열린 소켓 abort");
+        FakeWebSocket bad = new FakeWebSocket();
+        bad.failSends = true;
+        assertTrue(bad.sendText("x", true).isCompletedExceptionally(), "전송 실패는 future로 관찰된다(서비스는 이를 연결 실패로 취급)");
+    }
+}

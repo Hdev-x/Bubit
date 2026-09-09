@@ -1,0 +1,695 @@
+import { useEffect } from 'react';
+import type { ISeriesApi, ISeriesMarkersPluginApi, SeriesMarker, Time } from 'lightweight-charts';
+import { createSeriesMarkers } from 'lightweight-charts';
+import { getPivots } from '../analysis/pivots';
+import { buildSwingMarkers } from '../analysis/swingMarkers';
+import { detectElliottWave, detectAbcWave, predictAbcWave } from '../analysis/elliottWavePattern';
+import { predictHarmonicPatterns } from '../analysis/harmonicPattern';
+import type { Candle } from '../../shared/types/market';
+import type { PivotSetting } from '../indicators/IndicatorSheet';
+import type { ChartTheme } from '../settings/theme';
+import type { AutoShape } from '../overlays/AutoPatternOverlay';
+import type { ElliottWaveResult, AbcWaveResult, AbcEmergingResult } from '../analysis/elliottWavePattern';
+import type { EmergingHarmonicResult } from '../analysis/harmonicPattern';
+import type { AutoPatternOverlay } from '../overlays/AutoPatternOverlay';
+import type { TrackerState } from '../../shared/types/bot';
+import {
+  getHarmonicPatternColor, harmonicPatternKey, focusHarmonicPatternKey,
+  buildHarmonicLabelStack, buildHarmonicTpSlLines, buildCompletedEmergingShapes, buildTrackerFocusShapes,
+} from './harmonicShapes';
+
+interface UseAutoPatternsProps {
+  candles: Candle[];
+  pivotSetting?: PivotSetting;
+  chartType?: 'candle' | 'line';
+  isLogScale?: boolean;
+  tickDecimals?: number;
+  chartTheme?: ChartTheme;
+  seriesRef: React.MutableRefObject<ISeriesApi<'Candlestick'> | ISeriesApi<'Line'> | null>;
+  waveSeriesRef: React.MutableRefObject<ISeriesApi<'Line'> | null>;
+  autoPatternOverlayRef: React.MutableRefObject<AutoPatternOverlay | null>;
+  markersPrimitiveRef: React.MutableRefObject<ISeriesMarkersPluginApi<Time> | null>;
+  toChartTime: (time: string | number) => Time;
+  drawingStorageKey?: string;
+  variant?: string;
+  locked?: boolean;
+  focusTracker?: TrackerState | null;
+  highlightTracker?: TrackerState | null; // 클릭 강조: 매칭 패턴 원색, 나머지 흐리게 (M-H5)
+  soloDimAll?: boolean; // solo 모드: 매칭 없어도(다른 TF 등) 나머지 전부 흐림 (웹 solo 포커스)
+}
+
+export function useAutoPatterns({
+  candles,
+  pivotSetting: providedPivotSetting,
+  chartType,
+  isLogScale = false,
+  tickDecimals = 2,
+  seriesRef,
+  waveSeriesRef,
+  autoPatternOverlayRef,
+  markersPrimitiveRef,
+  toChartTime,
+  drawingStorageKey,
+  variant,
+  locked,
+  focusTracker,
+  highlightTracker,
+  soloDimAll,
+}: UseAutoPatternsProps) {
+  // 스윙 하이/로우 (Pivot) 마커 업데이트
+  useEffect(() => {
+    if (!seriesRef.current || !candles.length) return;
+    const pivotSetting = providedPivotSetting ?? { show: false, length: 10, basis: 'wick' as const };
+    const hasFocusTracker = !!focusTracker?.xabc;
+    
+    let markers: SeriesMarker<Time>[] = [];
+
+    if ((pivotSetting.show || pivotSetting.showHarmonic || pivotSetting.showElliottWave || pivotSetting.showAbcWave || hasFocusTracker) && candles.length > (pivotSetting.length || 10) * 2) {
+      const { length = 10, basis = 'wick' } = pivotSetting;
+
+      const filteredPivots = getPivots(candles, length, basis, toChartTime);
+
+      // Generate Markers & Wave Line
+      // 파동 선(showWave)은 Swing High/Low 마스터(show) 하위 → show가 꺼지면 같이 꺼짐
+      const swing = buildSwingMarkers(filteredPivots, {
+        show: pivotSetting.show,
+        showWave: pivotSetting.show ? (pivotSetting.showWave ?? true) : false,
+      });
+      markers = swing.markers;
+
+      if (waveSeriesRef.current) {
+        waveSeriesRef.current.setData(swing.waveData);
+      }
+
+      const autoShapes: AutoShape[] = [];
+
+      const getWaveColor = (scanLen: number, isBullish: boolean, waveType: 'elliott' | 'abc') => {
+          if (waveType === 'elliott') {
+            if (isBullish) {
+              if (scanLen <= 10) return 'rgba(6, 182, 212, 0.8)'; // Cyan
+              if (scanLen <= 20) return 'rgba(59, 130, 246, 0.8)'; // Blue
+              return 'rgba(139, 92, 246, 0.8)'; // Purple
+            } else {
+              if (scanLen <= 10) return 'rgba(249, 115, 22, 0.8)'; // Orange
+              if (scanLen <= 20) return 'rgba(239, 68, 68, 0.8)'; // Red
+              return 'rgba(225, 29, 72, 0.8)'; // Rose
+            }
+          } else {
+            if (isBullish) {
+              if (scanLen <= 10) return 'rgba(132, 204, 22, 0.8)'; // Lime
+              if (scanLen <= 20) return 'rgba(34, 197, 94, 0.8)'; // Green
+              return 'rgba(16, 185, 129, 0.8)'; // Emerald
+            } else {
+              if (scanLen <= 10) return 'rgba(234, 179, 8, 0.8)'; // Yellow
+              if (scanLen <= 20) return 'rgba(245, 158, 11, 0.8)'; // Amber
+              return 'rgba(234, 88, 12, 0.8)'; // Orange
+            }
+          }
+        };
+
+        if (pivotSetting.showElliottWave) {
+          const scanLen = pivotSetting.elliottLength || 21;
+          let allWaves: ElliottWaveResult[] = [];
+          
+          if (candles.length > scanLen * 2) {
+            const scanPivots = getPivots(candles, scanLen, pivotSetting.basis || 'wick', toChartTime);
+            allWaves = detectElliottWave(scanPivots, isLogScale);
+          }
+
+          allWaves.forEach((bestWave) => {
+            const { P0, P1, P2, P3, P4, P5 } = bestWave.points;
+            const pts = [
+              { time: P0.time, price: P0.price },
+              { time: P1.time, price: P1.price },
+              { time: P2.time, price: P2.price },
+              { time: P3.time, price: P3.price },
+              { time: P4.time, price: P4.price },
+              { time: P5.time, price: P5.price },
+            ];
+
+            const color = getWaveColor(scanLen, bestWave.isBullish, 'elliott');
+
+            for (let i = 0; i < 5; i++) {
+              autoShapes.push({
+                type: 'segment',
+                from: pts[i],
+                to: pts[i + 1],
+                color,
+                lineWidth: 2,
+                lineStyle: 'solid',
+              });
+            }
+
+            for (let i = 1; i <= 5; i++) {
+              autoShapes.push({
+                type: 'label',
+                point: pts[i],
+                text: `(${i})`,
+                color,
+                textAlign: 'center',
+                fontSize: 14,
+                fontWeight: 'bold',
+              });
+            }
+          });
+        }
+
+        let uniqueAbcWaves: (AbcWaveResult & { scanLen: number })[] = [];
+
+        if (pivotSetting.showAbcWave) {
+          const isMulti = pivotSetting.abcMode === 'multi';
+          // 큰 파동(장기)부터 찾아서 색상을 장기 기준으로 덮어씌우기 위해 배열을 뒤집습니다.
+          const scanLengths = isMulti ? [5, 8, 13, 21, 34, 55].reverse() : [pivotSetting.abcLength || 21];
+          const foundWaves: (AbcWaveResult & { scanLen: number })[] = [];
+          
+          for (const scanLen of scanLengths) {
+            if (candles.length > scanLen * 2) {
+              const scanPivots = getPivots(candles, scanLen, pivotSetting.basis || 'wick', toChartTime);
+              const abcWaves = detectAbcWave(scanPivots, isLogScale, candles);
+              for (const abcWave of abcWaves) {
+                foundWaves.push({ ...abcWave, scanLen });
+              }
+            }
+          }
+
+          // 중복 제거: A·B점 시간 + 비율 라벨 + 방향 기준. scanLengths가 큰 순서로 스캔하므로 메이저 scanLen이 살아남음.
+          const uniqueWaves: (AbcWaveResult & { scanLen: number })[] = [];
+          const seen = new Set<string>();
+          for (const w of foundWaves) {
+            const key = `${w.points.A.time}_${w.points.B.time}_${w.label}_${w.isBullish}`;
+            if (!seen.has(key)) {
+              seen.add(key);
+              uniqueWaves.push(w);
+            }
+          }
+          
+          uniqueAbcWaves = uniqueWaves;
+
+          // 완성 패턴 그리기 (탐지/dedup은 위에서 유지, 표시만 토글)
+          if (pivotSetting.showAbcCompleted !== false)
+          uniqueWaves.forEach((bestAbc) => {
+            const { A, B, C, D } = bestAbc.points;
+            const color = getWaveColor(bestAbc.scanLen, bestAbc.isBullish, 'abc');
+
+            // C->D 선을 그릴 때만 스냅된 D 가격(snappedDPrice)을 사용합니다.
+            // D 수평선과 박스는 실제 타겟 비율 가격(przPrice)을 사용합니다.
+            const exactDPrice = bestAbc.przPrice ?? D.price;
+            const snappedDPrice = bestAbc.isBullish ? candles[D.i].low : candles[D.i].high;
+            const pts = [A, B, C, { ...D, price: snappedDPrice }];
+
+            const minPrice = Math.min(A.price, B.price, C.price, snappedDPrice, exactDPrice);
+            const maxPrice = Math.max(A.price, B.price, C.price, snappedDPrice, exactDPrice);
+            const offset = (maxPrice - minPrice) * 0.05; // 패턴 전체 높이의 5%를 여백으로 사용
+
+            // A-B, B-C, C-D 선 그리기
+            if (pivotSetting.showAbcLines !== false) {
+              for (let i = 0; i < 3; i++) {
+                autoShapes.push({
+                  type: 'segment',
+                  from: { time: pts[i].time, price: pts[i].price },
+                  to: { time: pts[i + 1].time, price: pts[i + 1].price },
+                  color,
+                  lineWidth: 1.5,
+                  lineStyle: 'solid',
+                });
+              }
+            }
+
+            // 라벨 그리기 (A, B, C, D)
+            if (pivotSetting.showAbcText) {
+              const labels = ['A', 'B', 'C', 'D'];
+              for (let i = 0; i < 4; i++) {
+                let text = labels[i];
+                let align = 'center';
+                
+                if (i === 3) {
+                  text = `D ${bestAbc.label}`;
+                  align = 'left';
+                }
+                
+                const labelPrice = pts[i].type === 'high' ? pts[i].price + offset : pts[i].price - offset;
+
+                autoShapes.push({
+                  type: 'label',
+                  point: { time: pts[i].time, price: labelPrice },
+                  text,
+                  color,
+                  textAlign: align as CanvasTextAlign,
+                  fontSize: i === 3 ? 12 : 14,
+                  fontWeight: 'bold',
+                });
+              }
+            }
+            if (bestAbc.slPrice) {
+              const baseColor = getWaveColor(bestAbc.scanLen, bestAbc.isBullish, 'abc');
+              const boxColor = baseColor.replace(/[\d.]+\)$/g, '0.15)');
+              const slColor = baseColor;
+
+              const startIdx = Math.max(0, D.i - 5);
+              const endIdx = Math.min(candles.length - 1, D.i + 5);
+              const startTime = toChartTime(candles[startIdx].time);
+              const endTime = toChartTime(candles[endIdx].time);
+
+              // D점 가격 ~ SL 가격 사이 배경 박스
+              autoShapes.push({
+                type: 'rect',
+                from: { time: startTime, price: exactDPrice },
+                to: { time: endTime, price: bestAbc.slPrice },
+                lineColor: 'transparent',
+                fillColor: boxColor,
+                lineWidth: 0,
+              });
+
+              // D 수평선 (과거차트 색상 실선, 불투명도 연하게)
+              const dLineColor = baseColor.replace(/[\d.]+\)$/g, '0.4)');
+              autoShapes.push({
+                type: 'segment',
+                from: { time: startTime, price: exactDPrice },
+                to: { time: endTime, price: exactDPrice },
+                color: dLineColor,
+                lineWidth: 1,
+                lineStyle: 'solid',
+              });
+
+              // SL 수평선 (기존 색상 실선, 얇게)
+              autoShapes.push({
+                type: 'segment',
+                from: { time: startTime, price: bestAbc.slPrice },
+                to: { time: endTime, price: bestAbc.slPrice },
+                color: slColor,
+                lineWidth: 1,
+                lineStyle: 'solid',
+              });
+
+              // D 텍스트 (왼쪽 비율, 기존 색상)
+              autoShapes.push({
+                type: 'label',
+                point: { time: startTime, price: exactDPrice },
+                text: `${bestAbc.label}  `,
+                color: baseColor,
+                textAlign: 'right',
+                fontSize: 11,
+                fontWeight: 'bold',
+              });
+            }
+          });
+        }
+
+        // ABC 파동 실시간 예측 (Emerging) - ABC 마스터(showAbcWave) 하위로 동작
+        if (pivotSetting.showAbcWave && pivotSetting.showAbcPrediction !== false) {
+          const scanLengths = [55, 34, 21, 13, 8, 5]; // 내림차순: 중복 시 메이저(큰 스캔)가 살아남도록 (하모닉과 통일)
+          const emergingWaves: (AbcEmergingResult & { scanLen: number })[] = [];
+            for (const scanLen of scanLengths) {
+              if (candles.length > scanLen * 2) {
+              const scanPivots = getPivots(candles, scanLen, pivotSetting.basis || 'wick', toChartTime);
+              const currentPrice = candles[candles.length - 1].close;
+              const predictions = predictAbcWave(scanPivots, currentPrice, isLogScale, candles);
+              for (const p of predictions) {
+                emergingWaves.push({ ...p, scanLen });
+              }
+            }
+          }
+
+          // 간단한 중복 제거 (A, B점 시간 기준)
+          const uniqueEmerging: (AbcEmergingResult & { scanLen: number })[] = [];
+          const seenEmerging = new Set<string>();
+          for (const w of emergingWaves) {
+            // 과거에 이미 완성된 동일한 ABC + 동일한 라벨의 패턴이 있다면 예측에서 제외 (숨김 처리)
+            const isAlreadyCompleted = uniqueAbcWaves.some(completed => 
+              completed.points.A.time === w.points.A.time &&
+              completed.points.B.time === w.points.B.time &&
+              completed.label === w.targetLabel
+            );
+            if (isAlreadyCompleted) continue;
+
+            const key = `${w.points.A.time}_${w.points.B.time}_${w.targetLabel}_${w.isBullish}`;
+            if (!seenEmerging.has(key)) {
+              seenEmerging.add(key);
+              uniqueEmerging.push(w);
+            }
+          }
+
+          uniqueEmerging.forEach((emg) => {
+            const { A, B, C } = emg.points;
+            
+            // 현재가 및 시간 계산
+            const currentIdx = candles.length - 1;
+            const currentTime = toChartTime(candles[currentIdx].time);
+
+            // D점 위치 결정
+            let dPredTime = currentTime;
+            if (emg.przTouchedTime) {
+              dPredTime = toChartTime(emg.przTouchedTime); // 캔들 터치 루프로 인해 raw time이 넘어오므로 변환
+            }
+
+            const baseColor = getWaveColor(emg.scanLen, emg.isBullish, 'abc');
+            const dLineColor = baseColor.replace(/[\d.]+\)$/g, '0.4)');
+            const boxBorderColor = baseColor.replace(/[\d.]+\)$/g, '0.2)');
+            const boxColor = baseColor.replace(/[\d.]+\)$/g, '0.15)');
+            const slColor = emg.isPrzTouched ? 'rgba(255, 0, 0, 0.8)' : 'rgba(239, 68, 68, 0.4)';
+
+            // A-B, B-C 구조선
+            for (let i = 0; i < 2; i++) {
+              const start = i === 0 ? A : B;
+              const end = i === 0 ? B : C;
+              autoShapes.push({
+                type: 'segment',
+                from: { time: start.time, price: start.price },
+                to: { time: end.time, price: end.price },
+                color: baseColor,
+                lineWidth: emg.isPrzTouched ? 1.5 : 0.5,
+                lineStyle: 'solid',
+              });
+            }
+            // 미터치 상태에서도 박스와 선이 보이도록 과거 5캔들 확보
+            let past5Time: Time = currentTime;
+            if (candles.length > 5) {
+              past5Time = toChartTime(candles[candles.length - 6].time);
+            } else if (candles.length > 0) {
+              past5Time = toChartTime(candles[0].time);
+            }
+            
+            // 터치했으면 터치 시간부터, 안 했으면 5캔들 전부터
+            const boxStartTime = emg.isPrzTouched ? dPredTime : past5Time;
+
+            // D점 (목표가 przPrice, 터치 시간). 박스/선은 D부터 현재까지 (하모닉 터치와 동일, 클램프 없음)
+            const dPredPrice = (emg.isPrzTouched && emg.przTouchedPrice !== undefined) ? emg.przTouchedPrice : emg.przPrice;
+            const pD = { time: dPredTime, price: dPredPrice };
+
+            // C→D 선 (구조선을 D까지 연결)
+            autoShapes.push({
+              type: 'segment',
+              from: { time: emg.points.C.time, price: emg.points.C.price },
+              to: { time: pD.time, price: pD.price },
+              color: emg.isPrzTouched ? baseColor : baseColor.replace(/, [\d.]+\)$/, ', 0.5)'),
+              lineWidth: emg.isPrzTouched ? 1.5 : 0.5,
+              lineStyle: emg.isPrzTouched ? 'solid' : 'dotted',
+            });
+
+            // D 타겟 수평선 (boxStartTime부터 현재까지)
+            autoShapes.push({
+              type: 'segment',
+              from: { time: boxStartTime, price: emg.przPrice },
+              to: { time: currentTime, price: emg.przPrice },
+              color: dLineColor,
+              lineWidth: 1,
+              lineStyle: emg.isPrzTouched ? 'solid' : 'dashed',
+            });
+
+            // PRZ 박스 반대편(SL) 기본 테두리 수평선 (항상 표시)
+            autoShapes.push({
+              type: 'segment',
+              from: { time: boxStartTime, price: emg.slPrice },
+              to: { time: currentTime, price: emg.slPrice },
+              color: boxBorderColor,
+              lineWidth: 1,
+              lineStyle: emg.isPrzTouched ? 'solid' : 'dashed',
+            });
+
+            // PRZ 박스 (boxStartTime부터 현재까지)
+            autoShapes.push({
+              type: 'rect',
+              from: { time: boxStartTime, price: emg.przPrice },
+              to: { time: currentTime, price: emg.slPrice },
+              lineColor: 'transparent',
+              fillColor: boxColor,
+              lineWidth: 0
+            });
+
+            // SL 강조 테두리 (항상 표시 - AB=CD에는 별도 토글 없음)
+            autoShapes.push({
+              type: 'segment',
+              from: { time: boxStartTime, price: emg.slPrice },
+              to: { time: currentTime, price: emg.slPrice },
+              color: slColor,
+              lineWidth: 1,
+              lineStyle: emg.isPrzTouched ? 'solid' : 'dashed',
+            });
+
+            // 패턴명 라벨
+            autoShapes.push({
+              type: 'label',
+              point: { time: currentTime, price: emg.przPrice },
+              text: `  AB=CD ${emg.targetLabel}`,
+              color: baseColor,
+              textAlign: 'left',
+              fontSize: 12,
+              fontWeight: emg.isPrzTouched ? 'bold' : '600',
+            });
+          });
+        }
+
+        // ===== 하모닉 패턴 그리기 (마스터 하위, 카테고리 토글은 패턴별로 — M-H4) =====
+        if (pivotSetting.showHarmonic) {
+          // 내림차순(큰 길이부터) — 완성 패턴과 통일
+          const scanLengths = [55, 34, 21, 13, 8, 5];
+          const currentPrice = candles[candles.length - 1].close;
+          const emergingPatterns: EmergingHarmonicResult[] = [];
+          for (const scanLen of scanLengths) {
+            if (candles.length > scanLen * 2) {
+              const scanPivots = getPivots(candles, scanLen, pivotSetting.basis || 'wick', toChartTime);
+              // display 모드: 탐색(미터치 최근만)/신호/완성(종료) 생애주기 분류 포함
+              const preds = predictHarmonicPatterns(scanPivots, currentPrice, isLogScale, candles, { mode: 'display' });
+              emergingPatterns.push(...preds);
+            }
+          }
+
+          // Cypher는 Shark와 X·A·B·C 공유 시 폐기(Shark 우선)
+          const sharkKeys = new Set<string>();
+          for (const p of emergingPatterns) {
+            if (p.name.includes('Shark')) sharkKeys.add(`${p.points.X.time}_${p.points.A.time}_${p.points.B.time}_${p.points.C.time}_${p.isBullish}`);
+          }
+
+          const uniqueEmerging: EmergingHarmonicResult[] = [];
+          const seenEmerging = new Set();
+          for (const pat of emergingPatterns) {
+            if (pat.name.includes('Cypher') && sharkKeys.has(`${pat.points.X.time}_${pat.points.A.time}_${pat.points.B.time}_${pat.points.C.time}_${pat.isBullish}`)) continue;
+            // C나 X만 살짝 다른 동일 패턴 중복 제거: A·B·이름·방향이 같으면 무관하게 하나만 (배열이 큰 스캔부터라 메이저가 살아남음)
+            const key = `${pat.points.A.time}_${pat.points.B.time}_${pat.name}_${pat.isBullish}`;
+            if (!seenEmerging.has(key)) {
+              seenEmerging.add(key);
+              uniqueEmerging.push(pat);
+            }
+          }
+
+          // 클릭 강조(M-H5): highlightTracker와 매칭되는 패턴은 원색, 나머지는 흐리게(opacity).
+          // 매칭 패턴이 하나도 없으면(좌표 미세차 등) 강조 안 함 → 전체 원색(faded 전체 방지).
+          const rawFocusKey = highlightTracker ? focusHarmonicPatternKey(highlightTracker, toChartTime) : null;
+          const focusKey = (rawFocusKey && uniqueEmerging.some(p => harmonicPatternKey(p.name, p.isBullish, p.points) === rawFocusKey))
+            ? rawFocusKey : null;
+          const DIM = 0.22;
+
+          // Gartley/Deep Gartley는 진입조건이 동일해 같은 XABC에서 쌍으로 출현 → 폴리곤이 겹침.
+          // 겹칠 때 Gartley 배경(fill)만 빼서 떡짐 방지 (외곽선·라벨은 둘 다 유지).
+          const deepGartleyKeys = new Set<string>();
+          for (const p of uniqueEmerging) {
+            if (p.name.includes('Deep Gartley')) {
+              deepGartleyKeys.add(`${p.points.X.time}_${p.points.A.time}_${p.points.B.time}_${p.points.C.time}_${p.isBullish}`);
+            }
+          }
+          const isGartleyFillSuppressed = (pat: EmergingHarmonicResult) =>
+            pat.name.includes('Gartley') && !pat.name.includes('Deep') &&
+            deepGartleyKeys.has(`${pat.points.X.time}_${pat.points.A.time}_${pat.points.B.time}_${pat.points.C.time}_${pat.isBullish}`);
+
+          uniqueEmerging.forEach((pattern) => {
+            const dimThis = !!focusKey && harmonicPatternKey(pattern.name, pattern.isBullish, pattern.points) !== focusKey;
+            // ── 카테고리 토글 (M-H4): 생애주기별 독립 4토글 ──
+            // 완성·폐기(cancelled) = 종료 상태 → 자기위치 고정 렌더(H6-2: 폐기도 표시). 폐기는 '완성' 토글 하위.
+            if (pattern.lifecycle === 'completed' || pattern.lifecycle === 'cancelled') {
+              const isSl = pattern.endReason === 'sl';
+              if (isSl && pivotSetting.showHarmonicStoploss === false) return;   // 손절 토글
+              if (!isSl && pivotSetting.showHarmonicCompleted === false) return; // 완성(TP·시간만료·폐기) 토글
+              const compShapes = buildCompletedEmergingShapes(pattern, candles, toChartTime, pivotSetting, isGartleyFillSuppressed(pattern));
+              if (dimThis) compShapes.forEach(s => { s.opacity = DIM; });
+              autoShapes.push(...compShapes);
+              return;
+            }
+            // 진행중: 탐색(scanning) / 신호·체결(signal·active)
+            if (pattern.lifecycle === 'scanning' && pivotSetting.showHarmonicScanning === false) return; // 탐색 토글
+            if ((pattern.lifecycle === 'signal' || pattern.lifecycle === 'active') && pivotSetting.showHarmonicSignal === false) return; // 신호·체결 토글
+            const dimStartLen = autoShapes.length;
+            const { X, A, B, C } = pattern.points;
+            const pX = { time: X.time, price: X.price };
+            const pA = { time: A.time, price: A.price };
+            const pB = { time: B.time, price: B.price };
+            const pC = { time: C.time, price: C.price };
+            const isBullish = pattern.isBullish;
+            
+            const currentTime = toChartTime(candles[candles.length - 1].time);
+            let dPredTime = currentTime;
+            if (pattern.isPrzTouched && pattern.przTouchedTime) {
+              dPredTime = toChartTime(pattern.przTouchedTime); // 하모닉은 raw candle.time 저장 → 변환 필요 (ABC와 다름)
+            }
+            const dPredPrice = (pattern.isPrzTouched && pattern.przTouchedPrice !== undefined) ? pattern.przTouchedPrice : pattern.przPrice;
+            const pD_pred = { time: dPredTime, price: dPredPrice };
+            
+            // 미터치(탐색)는 점선·배경을 좀 더 강조 — 터치(신호·체결) 기존 스타일은 유지.
+            const lineAlpha = pattern.isPrzTouched ? 0.4 : 0.5;
+            // 외곽선/배경 토글(showHarmonicLines/Fill) — 완성과 동일하게 탐색·신호에도 적용(R4).
+            const lineColor = pivotSetting.showHarmonicLines === false ? 'transparent' : getHarmonicPatternColor(pattern.name, lineAlpha);
+            // 미터치=옅은 배경(0.10), 터치=진하게(0.2). 토글 off면 투명.
+            const fillColor = (pivotSetting.showHarmonicFill === false || isGartleyFillSuppressed(pattern)) ? 'transparent' : getHarmonicPatternColor(pattern.name, pattern.isPrzTouched ? 0.2 : 0.08);
+
+            const nameColor = getHarmonicPatternColor(pattern.name, pattern.isPrzTouched ? 1.0 : 0.6);
+            const borderStyle = pattern.isPrzTouched ? 'solid' : 'dashed';
+            const polyLineWidth = pattern.isPrzTouched ? 0.5 : 0.7; // 미터치 점선 약간 굵게
+
+            autoShapes.push({
+              type: 'polygon',
+              points: [pX, pA, pB],
+              lineColor,
+              fillColor,
+              lineWidth: polyLineWidth,
+              lineStyle: borderStyle
+            });
+
+            autoShapes.push({
+              type: 'polygon',
+              points: [pB, pC, pD_pred],
+              lineColor,
+              fillColor,
+              lineWidth: polyLineWidth,
+              lineStyle: borderStyle
+            });
+
+            // 미래 빈 공간으로는 좌표를 찾지 못해 그려지지 않으므로, 
+            // 현재 캔들 기준으로 과거 5캔들 전 위치를 시작점으로 하여 정확히 5캔들 길이의 선을 확보
+            let past5Time: Time = currentTime;
+            if (candles.length > 5) {
+              past5Time = toChartTime(candles[candles.length - 6].time);
+            } else if (candles.length > 0) {
+              past5Time = toChartTime(candles[0].time);
+            }
+
+            let przBoxStart = pattern.isPrzTouched ? dPredTime : past5Time;
+            
+            // 너무 과거부터 그리면 화면을 가리므로, 최대 5캔들 전까지만 표시
+            const maxPastIdxHarmonic = Math.max(0, candles.length - 1 - 5);
+            const maxPastTimeHarmonic = toChartTime(candles[maxPastIdxHarmonic].time);
+            if (!pattern.isPrzTouched && przBoxStart < maxPastTimeHarmonic) {
+              przBoxStart = maxPastTimeHarmonic; // 미터치만 5캔들 제한, 터치는 진짜 D부터
+            }
+            const przBoxEnd = currentTime;
+            const przBoxColor = getHarmonicPatternColor(pattern.name, 0.15); // 배경 투명도 (0.15)
+            const przBoxDBorder = getHarmonicPatternColor(pattern.name, 0.7); // D쪽 테두리 강조 (0.7)
+            const slColor = pattern.isPrzTouched ? 'rgba(255, 0, 0, 0.4)' : 'rgba(239, 68, 68, 0.4)';
+
+            autoShapes.push({
+              type: 'rect',
+              from: { time: przBoxStart, price: pattern.przMax },
+              to: { time: przBoxEnd, price: pattern.przMin },
+              lineColor: 'transparent',
+              fillColor: przBoxColor,
+              lineWidth: 0
+            });
+
+            autoShapes.push({
+              type: 'segment',
+              from: { time: przBoxStart, price: pattern.przMax },
+              to: { time: przBoxEnd, price: pattern.przMax },
+              color: !isBullish ? slColor : przBoxDBorder, // Bearish일 때 상단(przMax)이 SL 방향
+              lineWidth: 1,
+              lineStyle: borderStyle
+            });
+
+            autoShapes.push({
+              type: 'segment',
+              from: { time: przBoxStart, price: pattern.przMin },
+              to: { time: przBoxEnd, price: pattern.przMin },
+              color: isBullish ? slColor : przBoxDBorder, // Bullish일 때 하단(przMin)이 SL 방향
+              lineWidth: 1,
+              lineStyle: borderStyle
+            });
+
+            const cleanName = pattern.name.replace(/\s*\(Emerging\)/, '');
+            if (pattern.isPrzTouched) {
+              // 신호(터치): 완성과 동일한 이름+AB=CD 스택 (B수직×X또는D 가까운쪽). 종료사유는 없음. (R3)
+              autoShapes.push(...buildHarmonicLabelStack({
+                pB: { time: B.time as Time, price: B.price },
+                pX: { time: X.time as Time, price: X.price },
+                przPrice: pattern.przPrice,
+                name: cleanName,
+                abcdRatio: pattern.abcdRatio,
+                isBullish,
+              }));
+            } else {
+              // 탐색(미터치): 이름만 현재 옆에 (기존 유지)
+              autoShapes.push({
+                type: 'label',
+                point: { time: currentTime, price: pattern.przPrice },
+                text: `  ${pattern.name}`,
+                color: nameColor,
+                textAlign: 'left',
+                fontSize: 12,
+                fontWeight: '600',
+              });
+            }
+
+            if (pattern.isPrzTouched) {
+              // 신호(터치): TP1/TP2/SL 선·% 완성과 동일 (D±5 창, 공유 헬퍼). (R3)
+              const dRawT = pattern.przTouchedTime != null ? pattern.przTouchedTime : candles[candles.length - 1].time;
+              const dRawTime = toChartTime(dRawT);
+              let dIdx = candles.findIndex(c => toChartTime(c.time) >= dRawTime);
+              if (dIdx < 0) dIdx = candles.length - 1;
+              const tpStart = toChartTime(candles[Math.max(0, dIdx - 5)].time);
+              const tpEnd = toChartTime(candles[Math.min(dIdx + 5, candles.length - 1)].time);
+              autoShapes.push(...buildHarmonicTpSlLines({
+                startTime: tpStart, endTime: tpEnd, przPrice: pattern.przPrice,
+                tp1: pattern.tp1, tp2: pattern.tp2, slPrice: pattern.slPrice,
+                slCol: 'rgba(248, 81, 73, 0.8)', pivotSetting,
+              }));
+            } else if (pivotSetting.showSlLine) {
+              // 탐색(미터치): 기존 트레일링 SL 선
+              const slTimeStart = past5Time; // SL 박스는 항상 현재가 기준 과거 5캔들까지만
+              const slTimeEnd = currentTime;
+              autoShapes.push({
+                type: 'rect',
+                from: { time: slTimeStart, price: pattern.przPrice },
+                to: { time: slTimeEnd, price: pattern.slPrice },
+                lineColor: 'transparent',
+                fillColor: 'transparent',
+                lineWidth: 0
+              });
+              autoShapes.push({
+                type: 'segment',
+                from: { time: slTimeStart, price: pattern.slPrice },
+                to: { time: slTimeEnd, price: pattern.slPrice },
+                color: slColor,
+                lineWidth: 1,
+                lineStyle: borderStyle
+              });
+            }
+            // 강조 안 된 패턴 흐리게 (이 패턴이 방금 push한 도형들에만 opacity 태그)
+            if (dimThis) for (let k = dimStartLen; k < autoShapes.length; k++) autoShapes[k].opacity = DIM;
+          });
+	        }
+          // (DB SL 아카이브 오버레이 제거됨 — 완성/종료 SL은 predict display 경로가 자기위치로 그림)
+          // focusTracker는 차트 이동(타임프레임/로딩범위/스크롤)만 담당한다.
+          // 패턴 자체는 위의 완성/예측 하모닉 지표 또는 SL 아카이브 오버레이가 이미 그리므로
+          // 여기서 별도 오버레이로 다시 그리지 않는다. (떠도는 포커스 오버레이 버그 방지)
+          // solo 포커스: 자동탐지 결과(autoShapes)는 버리고 클릭한 트래커 하나만 그림(저장 좌표, TF 무관).
+          // 흐림·focusKey 없이 "그 패턴만". SMC존·BB 등 별도 프리미티브는 그대로 유지된다.
+          const soloShapes = (soloDimAll && focusTracker?.xabc && candles.length)
+            ? buildTrackerFocusShapes(focusTracker, candles, toChartTime, pivotSetting)
+            : null;
+	        autoPatternOverlayRef.current?.update(soloShapes ?? autoShapes);
+	    } else {
+      if (waveSeriesRef.current) {
+        waveSeriesRef.current.setData([]);
+      }
+      autoPatternOverlayRef.current?.update([]);
+    }
+
+    // console.log('pivotSetting:', pivotSetting, 'markers:', markers);
+    try {
+      if (!markersPrimitiveRef.current) {
+        markersPrimitiveRef.current = createSeriesMarkers(seriesRef.current, markers);
+      } else {
+        markersPrimitiveRef.current.setMarkers(markers);
+      }
+    } catch (e) {
+      console.warn('Failed to set markers:', e instanceof Error ? e.message : e);
+    }
+  }, [candles, providedPivotSetting, chartType, drawingStorageKey, variant, locked, focusTracker, highlightTracker, soloDimAll, isLogScale, tickDecimals, autoPatternOverlayRef, markersPrimitiveRef, seriesRef, waveSeriesRef, toChartTime]);
+
+}

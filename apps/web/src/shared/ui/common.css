@@ -1,0 +1,45 @@
+/* 양 앱 공용 규칙 — d02에서 mobile.css·desktop.css 중복을 한 곳으로. main.tsx가 셸 CSS 바로 뒤에 import한다.
+ .up/.down: Mobile 셸의 !important는 .chart-change-info.up/.down(mobile.css, 항상 덮여 있던 죽은 규칙)만 이기고 있어 그 규칙을 지우고 !important를 뺐다.
+ 예외로 AssetsPage.css `.asset-row span { color }`도 span.up/.down을 덮지만, 그 분기(AssetsPage.tsx의 BotState 표)는 data가 항상 null이라 렌더되지 않는다(기록).*/
+
+.up {
+  color: var(--up);
+}
+
+.down {
+  color: var(--down);
+}
+
+.brand-mark {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.brand-beta-badge {
+  position: absolute;
+  left: calc(100% + 4px);
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 0 4px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text3, #8a8c90);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(100deg, #101012 20%, #1c1d20 42%, #101012 64%);
+  background-size: 220% 100%;
+  animation: coin-skeleton-shimmer 1.45s ease-in-out infinite;
+}
+
+@keyframes coin-skeleton-shimmer {
+  to {
+    background-position: -220% 0;
+  }
+}

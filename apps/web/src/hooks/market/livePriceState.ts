@@ -1,0 +1,60 @@
+import type { BitgetTicker } from '../../api/exchange/bitget/bitgetTicker';
+
+// useLivePrice의 순수 상태 전이 — React 없이 테스트하기 위해 훅과 분리한다 .
+// 스테이지드 스왑 규칙: 종목이 바뀌어도 값은 옛 종목 것을 유지하다가 새 종목의 seed(REST 티커)가 오면
+// 한 번에 바뀐다. seed 전에 오는 WS 틱은 무시해 옛 값이 흔들리지 않게 한다(useCoinCandles의 loadedKeyRef와 같은 목적).
+
+export type LivePriceExchange = 'BITGET' | 'BINANCE' | 'UPBIT' | 'BITHUMB';
+
+export type LivePriceState = {
+  price: number | null;
+  dailyOpen: number | null;   // 등락 기준(티커 openUtc). 0이면 null
+  readyKey: string | null;    // seed가 끝난 "거래소|심볼|선물여부" 키
+};
+
+export const EMPTY_LIVE_PRICE: LivePriceState = { price: null, dailyOpen: null, readyKey: null };
+
+export function livePriceKey(exchange: LivePriceExchange, symbol: string, isFutures: boolean): string {
+  return `${exchange}|${symbol}|${isFutures}`;
+}
+
+/** readyKey에서 심볼만 — 헤더·호가의 "준비된 종목만 표시" 판정용 */
+export function readySymbolOf(state: LivePriceState): string | null {
+  if (!state.readyKey) return null;
+  return state.readyKey.split('|')[1] ?? null;
+}
+
+/**
+ * REST seed 도착. 요청한 키가 현재 키와 다르면(전환 중 늦은 응답) 버린다. last가 없으면 변화 없음.
+ * dailyOpen은 호출자가 준 값(캔들 1Dutc 시가)이 있으면 그것, 없으면 티커 openUtc.
+ * (Binance 24h 티커의 openPrice는 UTC 시가가 아니라 24시간 전 가격이라 등락 기준으로 쓰면 다른 거래소와 어긋난다 — 사용자 결정,)
+*/
+export function applySeed(state: LivePriceState, currentKey: string, seedKey: string, ticker: BitgetTicker | null, dailyOpen?: number | null): LivePriceState {
+  if (seedKey !== currentKey || !ticker || !ticker.last) return state;
+  return { price: ticker.last, dailyOpen: dailyOpen || ticker.openUtc || null, readyKey: currentKey };
+}
+
+/** 현재 키의 seed가 끝났는가 — 헤더·호가·탭 타이틀의 준비 판정(: 심볼이 아니라 거래소·현선물까지 포함한 키로).*/
+export function isReady(state: LivePriceState, currentKey: string): boolean {
+  return state.readyKey === currentKey;
+}
+
+/** 일봉 롤오버 등으로 등락 기준 시가만 갱신. 현재 키의 seed가 끝난 상태에서만(전환 중 옛 키 값 무시). */
+export function applyDailyOpen(state: LivePriceState, currentKey: string, dailyOpen: number | null): LivePriceState {
+  if (state.readyKey !== currentKey || !dailyOpen) return state;
+  if (state.dailyOpen === dailyOpen) return state;
+  return { ...state, dailyOpen };
+}
+
+/** 다음 00:00 UTC까지 남은 ms — 일봉 롤오버 타이머용. */
+export function msUntilNextUtcMidnight(nowMs: number): number {
+  const day = 86_400_000;
+  return day - (nowMs % day);
+}
+
+/** WS 틱. 현재 키의 seed가 끝난 뒤에만 반영한다. 같은 값이면 같은 객체를 돌려 렌더를 아낀다. */
+export function applyTick(state: LivePriceState, currentKey: string, price: number): LivePriceState {
+  if (state.readyKey !== currentKey || !price) return state;
+  if (state.price === price) return state;
+  return { ...state, price };
+}

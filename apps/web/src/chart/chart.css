@@ -1,0 +1,20 @@
+/* MarketChart 전용 규칙(양 앱 공용). d02에서 mobile.css의 규칙을 옮김. Desktop 위치 차이는 panels.css의 .chart-stage 범위 override*/
+
+/* ── 선택 드로잉 삭제 플로팅 버튼 ── */
+.drawing-delete-float {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(20, 22, 26, 0.9);
+  border: 1px solid #333;
+  border-radius: 8px;
+  color: #f6465d;
+  font-size: 12px;
+  padding: 6px 11px;
+  cursor: pointer;
+  z-index: 10;
+  backdrop-filter: blur(4px);
+}

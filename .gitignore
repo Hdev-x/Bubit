@@ -1,0 +1,43 @@
+# Local credentials and configuration
+.env*
+!.env.example
+application*.properties
+!application.example.properties
+!application-test.properties
+*.pem
+*.key
+*.p12
+*.pfx
+# Dependencies and generated artifacts
+node_modules/
+.gradle/
+build/
+dist/
+dist-desktop/
+dev-dist/
+.vite/
+.vite-desktop/
+.tmp/
+*.tsbuildinfo
+__pycache__/
+*.pyc
+*.log
+uploads/
+apps/api/src/main/resources/static/mobile/
+apps/api/src/main/resources/static/web/
+# Local editor and operating system files
+.DS_Store
+.idea/
+.vscode/
+*.iml
+.classpath
+.project
+.settings/
+# Development-only materials
+AGENTS.md
+CLAUDE.md
+.claude/
+.codex/
+.ai-workflow.local
+work-status/
+labs/
