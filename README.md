@@ -2,7 +2,7 @@
   <img src="apps/web/public/botz-icon.svg" alt="Bubit 로고" width="80" height="80" />
 </p>
 
-<h1 align="center">Bubit <sup>Beta</sup></h1>
+<h1 align="center"><img src="docs/images/title.svg" alt="Bubit Beta" width="240" height="44" /></h1>
 
 <p align="center">
   <strong>시세 확인부터 차트 분석까지, PC와 모바일에서.</strong><br />

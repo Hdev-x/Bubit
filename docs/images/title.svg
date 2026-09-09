@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="44" viewBox="0 0 240 44" role="img" aria-labelledby="title">
+  <title id="title">Bubit Beta</title>
+  <style>
+    text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    .name { fill: #1f2328; }
+    .beta { fill: #656d76; }
+    @media (prefers-color-scheme: dark) { .name { fill: #f0f6fc; } .beta { fill: #9198a1; } }
+  </style>
+  <text class="name" x="120" y="34" text-anchor="middle" font-size="32" font-weight="600">Bubit</text>
+  <text class="beta" x="174" y="15" font-size="12" font-weight="500">Beta</text>
+</svg>
