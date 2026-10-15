@@ -20,6 +20,7 @@ import org.springframework.messaging.simp.stomp.StompSessionHandlerAdapter;
 import org.springframework.messaging.simp.broker.SimpleBrokerMessageHandler;
 import org.springframework.messaging.simp.SimpMessageType;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.web.socket.WebSocketHttpHeaders;
@@ -31,6 +32,7 @@ import org.springframework.web.socket.client.standard.StandardWebSocketClient;
 import org.springframework.web.socket.messaging.WebSocketStompClient;
 
 import java.lang.reflect.Type;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
@@ -55,6 +57,9 @@ class WebSocketAuthenticationIntegrationTest {
 
     @Autowired
     SimpleBrokerMessageHandler broker;
+
+    @Autowired
+    SimpMessagingTemplate messagingTemplate;
 
     private WebSocketStompClient client;
     private Logger rootLogger;
@@ -90,6 +95,71 @@ class WebSocketAuthenticationIntegrationTest {
         assertTrue(waitUntil(() -> !hasSubscription(subscriptionId, "/topic/coin/TEST")));
 
         assertLogsDoNotContain(token);
+    }
+
+    @Test
+    void anonymousConnectReceivesPublicMarketAndCandleMessages() throws Exception {
+        StompSession session = connect(null, new RecordingHandler());
+        byte[] update = "{\"symbol\":\"TEST\",\"price\":\"123.45\"}".getBytes(StandardCharsets.UTF_8);
+        try {
+            for (String destination : List.of(
+                    "/topic/coin/테스트_USDT-1",
+                    "/topic/coin-futures/TESTUSDT",
+                    "/topic/binance-spot/TESTUSDT",
+                    "/topic/binance-futures/TESTUSDT",
+                    "/topic/binance-kline/spot/TESTUSDT/1m",
+                    "/topic/binance-kline/futures/TESTUSDT/1M")) {
+                BlockingQueue<byte[]> received = new LinkedBlockingQueue<>();
+                StompSession.Subscription subscription = session.subscribe(destination, new StompFrameHandler() {
+                    @Override
+                    public Type getPayloadType(StompHeaders headers) {
+                        return byte[].class;
+                    }
+
+                    @Override
+                    public void handleFrame(StompHeaders headers, Object payload) {
+                        received.add((byte[]) payload);
+                    }
+                });
+                String subscriptionId = subscription.getSubscriptionId();
+                assertTrue(waitUntil(() -> hasSubscription(subscriptionId, destination)), destination);
+
+                messagingTemplate.convertAndSend(destination, update);
+                assertArrayEquals(update, received.poll(5, TimeUnit.SECONDS), destination);
+
+                subscription.unsubscribe();
+                assertTrue(waitUntil(() -> !hasSubscription(subscriptionId, destination)), destination);
+            }
+        } finally {
+            session.disconnect();
+        }
+    }
+
+    @Test
+    void anonymousConnectCannotSubscribeToPrivateOrWildcardTopicsOrSendMessages() throws Exception {
+        for (String frame : List.of(
+                "SUBSCRIBE\nid:guest-sub\ndestination:/topic/account/TEST\n\n\0",
+                "SUBSCRIBE\nid:guest-sub\ndestination:/topic/coin/*\n\n\0",
+                "SUBSCRIBE\nid:guest-sub\ndestination:/topic/**\n\n\0",
+                "SUBSCRIBE\nid:guest-sub\ndestination:/topic/binance-kline/spot/TESTUSDT/invalid\n\n\0",
+                "SEND\ndestination:/app/test\n\n{}\0",
+                "SEND\ndestination:/topic/coin/TEST\n\n{}\0")) {
+            RawHandler handler = new RawHandler();
+            WebSocketSession socket = rawConnect("/ws-coin", handler);
+            try {
+                socket.sendMessage(new TextMessage("CONNECT\naccept-version:1.2\n\n\0"));
+                String connected = handler.events.poll(5, TimeUnit.SECONDS);
+                assertNotNull(connected);
+                assertTrue(connected.startsWith("CONNECTED"), connected);
+
+                socket.sendMessage(new TextMessage(frame));
+                String rejected = handler.events.poll(5, TimeUnit.SECONDS);
+                assertNotNull(rejected, frame);
+                assertTrue(rejected.startsWith("ERROR"), rejected);
+            } finally {
+                socket.close();
+            }
+        }
     }
 
     @Test
@@ -145,7 +215,9 @@ class WebSocketAuthenticationIntegrationTest {
 
     private StompSession connect(String authorization, RecordingHandler handler) throws Exception {
         StompHeaders headers = new StompHeaders();
-        headers.add("Authorization", authorization);
+        if (authorization != null) {
+            headers.add("Authorization", authorization);
+        }
         return client.connectAsync(
                         "ws://localhost:" + port + "/ws-coin",
                         new WebSocketHttpHeaders(), headers, handler)
