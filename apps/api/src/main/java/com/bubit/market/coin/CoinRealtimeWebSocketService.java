@@ -28,6 +28,9 @@ import java.util.Set;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
@@ -41,9 +44,11 @@ public class CoinRealtimeWebSocketService {
     private static final URI BITGET_USDC_FUTURES_TICKERS =
             URI.create("https://api.bitget.com/api/v2/mix/market/tickers?productType=USDC-FUTURES");
     private static final int CHANNELS_PER_CONNECTION = 40;
+    private static final long IDLE_UNSUB_MS = 8_000;
 
     private final SimpMessagingTemplate messagingTemplate;
     private final ObjectMapper objectMapper;
+    private final TickerSubscriptions subscriptions;
     private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
     private static final long STALE_TIMEOUT_MS = 60_000; // 구독 중인데 이 시간 무수신이면 재연결
     private final Map<String, Map<String, Object>> latestTickers = new ConcurrentHashMap<>();
@@ -52,16 +57,21 @@ public class CoinRealtimeWebSocketService {
     private final Map<String, Map<String, Object>> pendingBroadcasts = new ConcurrentHashMap<>();
     private final List<BitgetConnection> connections = new CopyOnWriteArrayList<>();
     private final AtomicBoolean firstTickerLogged = new AtomicBoolean(false);
+    private final AtomicBoolean refreshingSubscriptions = new AtomicBoolean(false);
 
     private volatile Set<String> subscribedChannels = Set.of();
+    private volatile List<Map<String, String>> availableArguments = List.of();
+    private final Map<String, Long> lastDemandAt = new HashMap<>();
     private volatile boolean shuttingDown;
 
     @Value("${app.coin.websocket.enabled:true}")
     private boolean enabled;
 
-    public CoinRealtimeWebSocketService(SimpMessagingTemplate messagingTemplate, ObjectMapper objectMapper) {
+    public CoinRealtimeWebSocketService(SimpMessagingTemplate messagingTemplate, ObjectMapper objectMapper,
+                                       TickerSubscriptions subscriptions) {
         this.messagingTemplate = messagingTemplate;
         this.objectMapper = objectMapper;
+        this.subscriptions = subscriptions;
     }
 
     @PostConstruct
@@ -70,7 +80,7 @@ public class CoinRealtimeWebSocketService {
             log.info("코인 실시간 WebSocket 비활성화");
             return;
         }
-        Thread.ofVirtual().name("bitget-ticker-init").start(this::refreshSubscriptions);
+        refreshSubscriptions();
     }
 
     public Map<String, Object> getLatestTicker(String symbol) {
@@ -79,15 +89,46 @@ public class CoinRealtimeWebSocketService {
 
     @Scheduled(initialDelay = 300_000, fixedDelay = 300_000)
     public void refreshSubscriptions() {
-        if (!enabled || shuttingDown) {
-            return;
+        if (!enabled || shuttingDown || !refreshingSubscriptions.compareAndSet(false, true)) return;
+        // REST 대기가 같은 scheduler의 ticker 송출을 막지 않도록 초기 조회와 같은 가상 스레드를 쓴다.
+        Thread.ofVirtual().name("bitget-ticker-refresh").start(() -> {
+            try {
+                List<Map<String, String>> next = loadSubscriptionArguments();
+                if (next.isEmpty()) throw new IllegalStateException("종목 목록이 비어 있음");
+                availableArguments = next;
+                refreshDemand();
+            } catch (Exception e) {
+                // 상품군 하나라도 실패하면 기존 목록을 유지한다.
+                log.warn("Bitget 전체 ticker 구독 목록 조회 실패 — 기존 구성 유지: {}", e.getMessage());
+            } finally {
+                refreshingSubscriptions.set(false);
+            }
+        });
+    }
+
+    @Scheduled(fixedDelay = 1_000)
+    public synchronized void refreshDemand() {
+        if (!enabled || shuttingDown) return;
+        long now = System.currentTimeMillis();
+        List<Map<String, String>> wanted = new ArrayList<>();
+        for (Map<String, String> arg : availableArguments) {
+            String channel = channelKey(arg);
+            if (subscriptions.hasSubscribers(topicFor(arg.get("instType"), arg.get("instId")))) {
+                lastDemandAt.put(channel, now);
+            }
+            Long lastDemand = lastDemandAt.get(channel);
+            if (lastDemand != null && now - lastDemand < IDLE_UNSUB_MS) wanted.add(arg);
         }
-        try {
-            rebuildConnectionsIfChanged(loadSubscriptionArguments());
-        } catch (Exception e) {
-            // 상품군 하나라도 실패하면 이번 갱신을 건너뛰고 기존 구독 구성을 유지한다(빈 목록으로 구독 축소 금지, 결정)
-            log.warn("Bitget 전체 ticker 구독 목록 조회 실패 — 기존 구성 유지: {}", e.getMessage());
-        }
+        lastDemandAt.values().removeIf(lastDemand -> now - lastDemand >= IDLE_UNSUB_MS);
+        rebuildConnectionsIfChanged(wanted);
+    }
+
+    private static String channelKey(Map<String, String> arg) {
+        return arg.get("instType") + ":" + arg.get("instId");
+    }
+
+    private static String topicFor(String instType, String symbol) {
+        return (instType.endsWith("FUTURES") ? "/topic/coin-futures/" : "/topic/coin/") + symbol;
     }
 
     private List<Map<String, String>> loadSubscriptionArguments() throws Exception {
@@ -144,32 +185,57 @@ public class CoinRealtimeWebSocketService {
     private synchronized void rebuildConnectionsIfChanged(List<Map<String, String>> args) {
         Set<String> nextChannels = new LinkedHashSet<>();
         for (Map<String, String> arg : args) {
-            nextChannels.add(arg.get("instType") + ":" + arg.get("instId"));
+            nextChannels.add(channelKey(arg));
         }
-        if (nextChannels.isEmpty() || (nextChannels.equals(subscribedChannels) && !connections.isEmpty())) {
+        if (nextChannels.equals(subscribedChannels)) {
             return;
         }
 
+        Map<String, Map<String, String>> remaining = new LinkedHashMap<>();
+        for (Map<String, String> arg : args) remaining.put(channelKey(arg), arg);
+        Map<BitgetConnection, List<Map<String, String>>> retained = new LinkedHashMap<>();
         for (BitgetConnection connection : connections) {
-            connection.stop();
+            List<Map<String, String>> keep = new ArrayList<>();
+            for (Map<String, String> arg : connection.subscriptionArgs) {
+                if (nextChannels.contains(channelKey(arg))) {
+                    keep.add(arg);
+                    remaining.remove(channelKey(arg));
+                }
+            }
+            retained.put(connection, keep);
         }
-        connections.clear();
+        for (Map.Entry<BitgetConnection, List<Map<String, String>>> entry : retained.entrySet()) {
+            BitgetConnection connection = entry.getKey();
+            List<Map<String, String>> next = entry.getValue();
+            var additions = remaining.entrySet().iterator();
+            while (next.size() < CHANNELS_PER_CONNECTION && additions.hasNext()) {
+                next.add(additions.next().getValue());
+                additions.remove();
+            }
+            if (next.isEmpty()) {
+                connection.stop();
+                connections.remove(connection);
+            } else {
+                connection.updateSubscriptions(next);
+            }
+        }
         subscribedChannels = Set.copyOf(nextChannels);
 
-        for (int start = 0; start < args.size(); start += CHANNELS_PER_CONNECTION) {
-            int end = Math.min(start + CHANNELS_PER_CONNECTION, args.size());
-            BitgetConnection connection = new BitgetConnection(List.copyOf(args.subList(start, end)));
+        List<Map<String, String>> additions = new ArrayList<>(remaining.values());
+        for (int start = 0; start < additions.size(); start += CHANNELS_PER_CONNECTION) {
+            int end = Math.min(start + CHANNELS_PER_CONNECTION, additions.size());
+            BitgetConnection connection = new BitgetConnection(List.copyOf(additions.subList(start, end)));
             connections.add(connection);
             connection.connectAsync();
         }
-        log.info("Bitget 전체 실시간 구독 구성: 종목채널 {}개, WebSocket {}개",
+        log.info("Bitget 활성 실시간 구독 구성: 종목채널 {}개, WebSocket {}개",
                 args.size(), connections.size());
     }
 
     /**
      * [코얼레싱 송출] 250ms마다 버퍼에 쌓인 변경분을 종목별 최신값 1건씩만 일괄 송출한다.
      * 수천 건/초의 ticker를 종목당 최대 4회/초로 줄여 STOMP 부하와 WS 백프레셔를 완화한다.
-     * (latestTickers는 항상 최신이라 REST 조회에는 영향 없음)
+     * 수신 snapshot 저장과 송출 주기는 독립적이다.
      */
     @Scheduled(fixedDelay = 250)
     public void flushBroadcasts() {
@@ -178,7 +244,9 @@ public class CoinRealtimeWebSocketService {
         }
         for (String topic : new ArrayList<>(pendingBroadcasts.keySet())) {
             Map<String, Object> payload = pendingBroadcasts.remove(topic);
-            if (payload != null) {
+            if (payload != null && subscriptions.hasSubscribers(topic)) {
+                Object ts = payload.get("ts");
+                if (!(ts instanceof Number timestamp) || System.currentTimeMillis() - timestamp.longValue() > 5_000) continue;
                 try {
                     messagingTemplate.convertAndSend(topic, payload);
                 } catch (Exception e) {
@@ -224,7 +292,6 @@ public class CoinRealtimeWebSocketService {
 
             String symbol = argNode.path("instId").asText();
             String instType = argNode.path("instType").asText();
-            boolean isFutures = instType.endsWith("FUTURES");
             boolean handled = false;
             for (JsonNode item : dataNode) {
                 double price = item.path("lastPr").asDouble();
@@ -241,13 +308,13 @@ public class CoinRealtimeWebSocketService {
                 payload.put("ts", item.path("ts").asLong(Instant.now().toEpochMilli()));
 
                 latestTickers.put(symbol, payload);
-                String topic = isFutures ? "/topic/coin-futures/" + symbol : "/topic/coin/" + symbol;
+                String topic = topicFor(instType, symbol);
                 // [코얼레싱] 읽기 스레드에서는 송출하지 않고 최신값만 버퍼에 적재 → 백프레셔 방지.
                 // 같은 topic의 더 최신 값으로 덮어쓰며, 실제 송출은 flush()가 일괄 처리한다.
-                pendingBroadcasts.put(topic, payload);
+                if (subscriptions.hasSubscribers(topic)) pendingBroadcasts.put(topic, payload);
                 handled = true;
                 if (firstTickerLogged.compareAndSet(false, true)) {
-                    log.info("Bitget 전체 실시간 ticker 수신 시작: {} {} {}", instType, symbol, price);
+                    log.info("Bitget 활성 실시간 ticker 수신 시작: {} {} {}", instType, symbol, price);
                 }
             }
             return handled;
@@ -258,16 +325,20 @@ public class CoinRealtimeWebSocketService {
     }
 
     @PreDestroy
-    public void stop() {
+    public synchronized void stop() {
         shuttingDown = true;
         for (BitgetConnection connection : connections) {
             connection.stop();
         }
         connections.clear();
+        pendingBroadcasts.clear();
     }
 
     private final class BitgetConnection implements WebSocket.Listener {
-        private final List<Map<String, String>> subscriptionArgs;
+        private volatile List<Map<String, String>> subscriptionArgs;
+        private final Object subscriptionLock = new Object();
+        private final ExecutorService sender = Executors.newSingleThreadExecutor(
+                Thread.ofVirtual().name("bitget-ticker-sender-", 0).factory());
         private final StringBuilder messageBuffer = new StringBuilder();
         private volatile WebSocket socket;
         private final ReconnectPolicy reconnect = new ReconnectPolicy(3_000, 60_000);
@@ -277,6 +348,37 @@ public class CoinRealtimeWebSocketService {
 
         private BitgetConnection(List<Map<String, String>> subscriptionArgs) {
             this.subscriptionArgs = subscriptionArgs;
+        }
+
+        private void updateSubscriptions(List<Map<String, String>> next) {
+            synchronized (subscriptionLock) {
+                if (stopped || subscriptionArgs.equals(next)) return;
+                List<Map<String, String>> removed = new ArrayList<>(subscriptionArgs);
+                removed.removeAll(next);
+                List<Map<String, String>> added = new ArrayList<>(next);
+                added.removeAll(subscriptionArgs);
+                subscriptionArgs = List.copyOf(next);
+                if (socket == null) return; // onOpen이 최신 구독 목록 전체를 복원한다.
+                if (!removed.isEmpty()) enqueue(socket, "unsubscribe", removed);
+                if (!added.isEmpty()) enqueue(socket, "subscribe", added);
+            }
+        }
+
+        private void enqueue(WebSocket target, String operation, List<Map<String, String>> args) {
+            // 구독 변경과 ping을 같은 큐에 넣어 sendText 중첩과 순서 역전을 막는다.
+            sender.execute(() -> {
+                if (stopped || shuttingDown || target != socket) return;
+                try {
+                    String message = operation == null ? "ping"
+                            : objectMapper.writeValueAsString(Map.of("op", operation, "args", args));
+                    target.sendText(message, true).orTimeout(5, TimeUnit.SECONDS).join();
+                } catch (Exception e) {
+                    if (!stopped && !shuttingDown && target == socket) {
+                        log.warn("Bitget ticker 전송 실패 - 재연결: {}", e.getMessage());
+                        target.abort();
+                    }
+                }
+            });
         }
 
         private void connectAsync() {
@@ -309,20 +411,15 @@ public class CoinRealtimeWebSocketService {
 
         @Override
         public void onOpen(WebSocket webSocket) {
+            synchronized (subscriptionLock) {
+                if (stopped || shuttingDown) { webSocket.abort(); return; }
+                WebSocket previous = socket;
+                socket = webSocket;
+                if (previous != null && previous != webSocket) previous.abort();
+                enqueue(webSocket, "subscribe", subscriptionArgs);
+            }
             webSocket.request(1);
             lastMsgAt = System.currentTimeMillis();
-            try {
-                String message = objectMapper.writeValueAsString(Map.of("op", "subscribe", "args", subscriptionArgs));
-                // 구독 전송 실패를 관찰한다 — 실패하면 소켓을 끊어 maintain이 재연결하게
-                webSocket.sendText(message, true).whenComplete((r, ex) -> {
-                    if (ex != null) {
-                        log.warn("Bitget ticker 구독 전송 실패 - 재연결: {}", ex.getMessage());
-                        webSocket.abort();
-                    }
-                });
-            } catch (Exception e) {
-                log.warn("Bitget ticker 구독 실패: {}", e.getMessage());
-            }
         }
 
         @Override
@@ -347,9 +444,11 @@ public class CoinRealtimeWebSocketService {
         }
 
         private void ping() {
-            WebSocket current = socket;
-            if (current != null && !current.isOutputClosed()) {
-                current.sendText("ping", true);
+            synchronized (subscriptionLock) {
+                WebSocket current = socket;
+                if (!stopped && current != null && !current.isOutputClosed()) {
+                    enqueue(current, null, List.of());
+                }
             }
         }
 
@@ -407,11 +506,12 @@ public class CoinRealtimeWebSocketService {
             }
         }
 
-        private synchronized void stop() { // connect()와 같은 lock
-            stopped = true;
-            WebSocket current = socket;
-            if (current != null && !current.isOutputClosed()) {
-                current.sendClose(WebSocket.NORMAL_CLOSURE, "shutdown");
+        private void stop() {
+            synchronized (subscriptionLock) {
+                stopped = true;
+                sender.shutdownNow();
+                WebSocket current = socket;
+                if (current != null) current.abort();
             }
         }
     }

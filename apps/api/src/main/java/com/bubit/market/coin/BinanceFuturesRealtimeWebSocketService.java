@@ -45,6 +45,8 @@ public class BinanceFuturesRealtimeWebSocketService implements WebSocket.Listene
     private final AtomicBoolean firstTickerLogged = new AtomicBoolean(false);
     private final AtomicInteger msgCount = new AtomicInteger(0);
     private final Map<String, Map<String, Object>> latestTickers = new ConcurrentHashMap<>();
+    private final Map<String, Map<String, Object>> pendingBroadcasts = new ConcurrentHashMap<>();
+    private final TickerSubscriptions subscriptions;
 
     private volatile WebSocket webSocket;
     private final ReconnectPolicy reconnect = new ReconnectPolicy(3_000, 60_000);
@@ -57,10 +59,12 @@ public class BinanceFuturesRealtimeWebSocketService implements WebSocket.Listene
     private volatile boolean connecting;
     private volatile boolean shuttingDown; // 종료 뒤 재연결 예약 금지
 
-    public BinanceFuturesRealtimeWebSocketService(SimpMessagingTemplate messagingTemplate, ObjectMapper objectMapper, BinanceRestGuard guard) {
+    public BinanceFuturesRealtimeWebSocketService(SimpMessagingTemplate messagingTemplate, ObjectMapper objectMapper,
+                                                       BinanceRestGuard guard, TickerSubscriptions subscriptions) {
         this.guard = guard;
         this.messagingTemplate = messagingTemplate;
         this.objectMapper = objectMapper;
+        this.subscriptions = subscriptions;
     }
 
     public Map<String, Map<String, Object>> getLatestTickers() {
@@ -200,12 +204,30 @@ public class BinanceFuturesRealtimeWebSocketService implements WebSocket.Listene
             lastTickerReceivedAt = System.currentTimeMillis();
             payload.put("receivedAt", System.currentTimeMillis()); // 스냅샷 나이 판정용 — REST 병합은 60초 안 것만
             latestTickers.put(symbol, payload);
-            messagingTemplate.convertAndSend("/topic/binance-futures/" + symbol, payload);
+            String topic = "/topic/binance-futures/" + symbol;
+            if (subscriptions.hasSubscribers(topic)) pendingBroadcasts.put(topic, payload);
             if (firstTickerLogged.compareAndSet(false, true)) {
                 log.info("Binance Futures UTC 일봉 ticker 수신 시작: {} = {}", symbol, price);
             }
         } catch (Exception e) {
             log.warn("Binance Futures 메시지 파싱 실패: {}", e.getMessage());
+        }
+    }
+
+    // 전 종목 UTC snapshot은 REST 목록에 필요하지만 송출은 보는 종목의 최신값만 남긴다.
+    @Scheduled(fixedDelay = 250)
+    public void flushBroadcasts() {
+        if (!enabled || shuttingDown) return;
+        for (String topic : new ArrayList<>(pendingBroadcasts.keySet())) {
+            Map<String, Object> payload = pendingBroadcasts.remove(topic);
+            if (payload == null || !subscriptions.hasSubscribers(topic)) continue;
+            Object ts = payload.get("ts");
+            if (!(ts instanceof Number timestamp) || System.currentTimeMillis() - timestamp.longValue() > 5_000) continue;
+            try {
+                messagingTemplate.convertAndSend(topic, payload);
+            } catch (Exception e) {
+                log.debug("ticker 송출 실패 {}: {}", topic, e.getMessage());
+            }
         }
     }
 
@@ -263,6 +285,7 @@ public class BinanceFuturesRealtimeWebSocketService implements WebSocket.Listene
     @PreDestroy
     public synchronized void stop() { // connect()와 같은 lock — 진행 중 연결이 끝난 뒤 닫히거나, 끝난 연결이 위 검사로 abort된다
         shuttingDown = true;
+        pendingBroadcasts.clear();
         WebSocket socket = webSocket;
         if (socket != null) socket.sendClose(WebSocket.NORMAL_CLOSURE, "shutdown");
     }
