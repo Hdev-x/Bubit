@@ -302,6 +302,7 @@ public class BinanceKlineRelayService {
                 if (symbol.isEmpty() || interval.isEmpty()) return;
                 Map<String, Object> payload = new HashMap<>();
                 payload.put("time", k.path("t").asLong() / 1000);
+                payload.put("ts", root.path("E").asLong());
                 payload.put("open", k.path("o").asDouble());
                 payload.put("high", k.path("h").asDouble());
                 payload.put("low", k.path("l").asDouble());
