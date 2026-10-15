@@ -3,12 +3,13 @@
 ## 폴더 경계
 
 - `apps/web/src/app/{desktop,mobile}`: 화면 배치·탭·패널과 앱 진입점
+- `apps/web/src/app/shared/{account,community,paper}`: PC·Mobile 공용 제품 화면
 - `apps/web/src/chart`: 차트 표시, 분석, 설정과 드로잉
 - `apps/web/src/hooks/{market,account,ui}`: 시세·계좌·화면 상태
 - `apps/web/src/api/{client,server,exchange}`: HTTP/인증과 거래소 연결
 - `apps/web/src/shared`: 앱 공용 UI·타입·유틸리티
 - 루트 `shared`: React나 DOM에 의존하지 않는 분석 계산
-- `apps/api/src/main/java/com/bubit`: `member` 인증·API 키 관리, `market/coin` 시세 중계, `trade` 계좌 조회, `common` 보안·공통 설정
+- `apps/api/src/main/java/com/bubit`: `member` 인증·프로필·API 키 관리, `community` 게시글·댓글, `market/coin` 시세 중계, `trade` 계좌 조회·수동 모의투자, `common` 보안·이미지 처리·공통 설정
 
 화면에서 차트·훅을 호출하고, 훅이 API와 공용 계산을 사용합니다. 루트 `shared`는 앱 화면을 참조하지 않습니다.
 공개본은 Beta 기능에 필요한 소스만 포함하며 비활성 봇 서버와 부팅 시 자동 DDL 실행 코드는 포함하지 않습니다.
@@ -25,7 +26,8 @@ REST는 스냅샷 보정, WebSocket은 실시간 갱신을 담당합니다. refr
 ## 인증과 계좌 정보
 
 Spring Security가 JWT를 검증하고 회원 비밀번호는 BCrypt로 해시합니다. 저장되는 거래소 자격증명은 서버 암호화 키로 암호화합니다.
-WebSocket 인증은 CONNECT 프레임의 Authorization으로 전달합니다. 토큰을 URL query에 넣지 않습니다.
+WebSocket 인증은 CONNECT 프레임의 Authorization으로 전달합니다. 토큰을 URL query에 넣지 않습니다. 비로그인은 허용된 공개 시세·커뮤니티 topic만 구독하며 게시글·계정 변경은 로그인과 서버 소유권 검사를 거칩니다.
+모의투자는 `paper` profile로 활성화하며 서버가 Bitget 공개 선물 시세로 체결합니다. 회원별 계좌 행 잠금으로 주문·취소·청산·초기화를 직렬화합니다.
 서버 키는 실행 환경에서 주입하며 `VITE_*` 변수에 넣지 않습니다. 클라이언트에 포함되는 값은 비밀이 될 수 없습니다.
 
 ## 검증 경계

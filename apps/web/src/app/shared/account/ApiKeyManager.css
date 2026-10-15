@@ -1,0 +1,18 @@
+.account-keys { color: #e8e9ec; text-align: left; }
+.account-keys-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.account-keys h3 { margin: 0; font-size: 16px; }
+.account-keys p { font-size: 12px; line-height: 1.5; }
+.account-keys-heading p, .account-muted { color: #92959f; }
+.account-keys button { border: 1px solid #34363d; background: #23252c; border-radius: 8px; color: #e8e9ec; padding: 8px 12px; cursor: pointer; white-space: nowrap; font: inherit; font-size: 12px; }
+.account-keys button:disabled { cursor: default; opacity: .5; }
+.account-keys-form { display: grid; gap: 14px; margin: 16px 0; padding: 16px; border: 1px solid #2d3038; border-radius: 12px; }
+.account-keys-form label { display: grid; gap: 7px; color: #bfc2cb; font-size: 12px; }
+.account-keys-form input, .account-keys-form select { width: 100%; box-sizing: border-box; border: 1px solid #34363d; background: #111318; color: #e8e9ec; padding: 10px; border-radius: 8px; font: inherit; }
+.account-keys .account-primary { background: #2d62df; border-color: #2d62df; }
+.account-error { color: #ff8995; font-size: 13px; line-height: 1.5; }
+.account-keys-list { list-style: none; padding: 0; margin: 12px 0 0; }
+.account-keys-list li { display: flex; align-items: center; gap: 12px; justify-content: space-between; padding: 14px 0; border-top: 1px solid #2b2d34; }
+.account-key-info { display: grid; gap: 5px; min-width: 0; }
+.account-key-info strong, .account-key-info code { overflow-wrap: anywhere; font-size: 13px; }
+.account-key-info span { color: #92959f; font-size: 11px; }
+.account-key-actions { display: flex; gap: 6px; flex-shrink: 0; }

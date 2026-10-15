@@ -1,8 +1,8 @@
 import type { BitgetTicker } from '../../api/exchange/bitget/bitgetTicker';
 
 // useLivePrice의 순수 상태 전이 — React 없이 테스트하기 위해 훅과 분리한다 .
-// 스테이지드 스왑 규칙: 종목이 바뀌어도 값은 옛 종목 것을 유지하다가 새 종목의 seed(REST 티커)가 오면
-// 한 번에 바뀐다. seed 전에 오는 WS 틱은 무시해 옛 값이 흔들리지 않게 한다(useCoinCandles의 loadedKeyRef와 같은 목적).
+// 종목 전환은 full key로 격리한다. 훅은 첫 유효 WS 또는 REST로 새 키를 준비하고,
+// 그 뒤 applyTick은 준비된 키의 현재가만 갱신한다.
 
 export type LivePriceExchange = 'BITGET' | 'BINANCE' | 'UPBIT' | 'BITHUMB';
 

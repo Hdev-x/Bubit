@@ -83,13 +83,16 @@ export async function fetchCoinLogos(): Promise<Record<string, string>> {
   }
 }
 
-export async function fetchCoinTickers(): Promise<CoinTicker[]> {
+type TickerRequestOptions = { throwOnError?: boolean };
+
+export async function fetchCoinTickers(options: TickerRequestOptions = {}): Promise<CoinTicker[]> {
   try {
     const response = await api.get<ListEnvelope<RawTickerRow>>('/coin/api/tickers');
     const rows = unwrapList(response.data);
 
     return normalizeCoinTickers(rows, 'SPOT');
   } catch (error) {
+    if (options.throwOnError) throw error;
     console.error('fetchCoinTickers failed:', error);
     return [];
   }
@@ -152,43 +155,40 @@ function normalizeCoinTickers(
     .sort((a, b) => (b.volume || 0) - (a.volume || 0));
 }
 
-export async function fetchCoinFuturesTickers(): Promise<CoinTicker[]> {
+export async function fetchCoinFuturesTickers(options: TickerRequestOptions & { quote?: 'USDT' | 'USDC' } = {}): Promise<CoinTicker[]> {
   try {
-    const responses = await Promise.all([
-      api.get<ListEnvelope<RawTickerRow>>('/coin/api/futures/tickers', { params: { productType: 'USDT-FUTURES' } }),
-      api.get<ListEnvelope<RawTickerRow>>('/coin/api/futures/tickers', { params: { productType: 'USDC-FUTURES' } })
-    ]);
-
-    const usdtRows = unwrapList(responses[0].data);
-    const usdcRows = unwrapList(responses[1].data);
-
-    return [
-      ...normalizeCoinTickers(usdtRows, 'USDT'),
-      ...normalizeCoinTickers(usdcRows, 'USDC')
-    ].sort((a, b) => (b.volume || 0) - (a.volume || 0));
+    const quotes = options.quote ? [options.quote] : ['USDT', 'USDC'] as const;
+    const lists = await Promise.all(quotes.map(async (quote) => {
+      const response = await api.get<ListEnvelope<RawTickerRow>>('/coin/api/futures/tickers', { params: { productType: `${quote}-FUTURES` } });
+      return normalizeCoinTickers(unwrapList(response.data), quote);
+    }));
+    return lists.flat().sort((a, b) => (b.volume || 0) - (a.volume || 0));
   } catch (error) {
+    if (options.throwOnError) throw error;
     console.error('fetchCoinFuturesTickers failed:', error);
     return [];
   }
 }
 
-export async function fetchBinanceSpotTickers(): Promise<CoinTicker[]> {
+export async function fetchBinanceSpotTickers(options: TickerRequestOptions = {}): Promise<CoinTicker[]> {
   try {
     const response = await api.get<ListEnvelope<RawTickerRow>>('/coin/api/binance/spot/tickers');
     const rows = unwrapList(response.data);
     return normalizeCoinTickers(rows, 'SPOT', 'BINANCE');
   } catch (error) {
+    if (options.throwOnError) throw error;
     console.error('fetchBinanceSpotTickers failed:', error);
     return [];
   }
 }
 
-export async function fetchBinanceFuturesTickers(): Promise<CoinTicker[]> {
+export async function fetchBinanceFuturesTickers(options: TickerRequestOptions = {}): Promise<CoinTicker[]> {
   try {
     const response = await api.get<ListEnvelope<RawTickerRow>>('/coin/api/binance/futures/tickers');
     const rows = unwrapList(response.data);
     return normalizeCoinTickers(rows, 'SPOT', 'BINANCE');
   } catch (error) {
+    if (options.throwOnError) throw error;
     console.error('fetchBinanceFuturesTickers failed:', error);
     return [];
   }

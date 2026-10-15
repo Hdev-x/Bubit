@@ -1,4 +1,5 @@
 export type CandleMessage = {
+  ts?: number;
   time: number;
   open: number;
   high: number;
@@ -19,6 +20,40 @@ export type RealtimeTicker = {
   volume?: number;
   ts?: number; // 거래소 이벤트 시각(ms) — 캔들 버킷팅을 클라 시계 대신 서버 시각으로
 };
+
+const tickerListeners = new Map<string, Set<(ticker: RealtimeTicker) => void>>();
+const latestTickers = new Map<string, { ticker: RealtimeTicker; receivedAt: number }>();
+
+// 차트는 기존 현재가 연결의 값만 듣고 별도 WebSocket을 열지 않는다.
+export function listenRealtimeTicker(topic: string, onTicker: (ticker: RealtimeTicker) => void): Subscription {
+  const listeners = tickerListeners.get(topic) ?? new Set<(ticker: RealtimeTicker) => void>();
+  listeners.add(onTicker);
+  tickerListeners.set(topic, listeners);
+  const latest = latestTickers.get(topic);
+  if (latest && Date.now() - latest.receivedAt <= 5_000) onTicker(latest.ticker);
+  return { close: () => {
+    listeners.delete(onTicker);
+    if (!listeners.size) { tickerListeners.delete(topic); latestTickers.delete(topic); }
+  } };
+}
+
+// 동일 시장의 헤더·차트·목록은 먼저 도착한 최신 이벤트를 함께 사용한다.
+export function publishRealtimeTicker(topic: string, ticker: RealtimeTicker): void {
+  if (!Number.isFinite(ticker.price) || ticker.price <= 0) return;
+  const previous = latestTickers.get(topic)?.ticker;
+  if (ticker.ts != null && (!Number.isFinite(ticker.ts) || (previous?.ts != null && ticker.ts < previous.ts))) return;
+  if (ticker.ts === previous?.ts && ticker.price === previous?.price) return;
+  const open = previous?.change == null ? null : previous.price - previous.change;
+  const next = { ...previous, ...ticker };
+  if (ticker.change == null && open != null && open > 0) {
+    next.change = ticker.price - open;
+    next.changeRate = next.change / open;
+  }
+  if (tickerListeners.has(topic)) {
+    latestTickers.set(topic, { ticker: next, receivedAt: Date.now() });
+    tickerListeners.get(topic)?.forEach(listener => listener(next));
+  }
+}
 
 function getWebSocketUrl() {
   // vite dev 모드면 포트(5173/5174/5175 등) 무관하게 8081로 직접 연결 (프록시 ws 업그레이드 우회)
@@ -65,6 +100,7 @@ function subscribeStompTopics(
   subIdPrefix: string,
   onTicker: (ticker: RealtimeTicker) => void
 ): Subscription {
+  const listeners = symbols.map(symbol => listenRealtimeTicker(`${topicPrefix}/${symbol}`, onTicker));
   let socket: WebSocket | null = null;
   let closedByClient = false;
   let reconnectTimer: number | undefined;
@@ -84,7 +120,7 @@ function subscribeStompTopics(
     };
 
     socket.onmessage = (event) => {
-      if (typeof event.data !== 'string') return;
+      if (closedByClient || typeof event.data !== 'string') return;
 
       for (const frame of parseStompFrames(event.data)) {
         const command = getFrameCommand(frame);
@@ -104,7 +140,7 @@ function subscribeStompTopics(
         try {
           const data = JSON.parse(getFrameBody(frame));
           if (data.symbol && data.price) {
-            onTicker({
+            publishRealtimeTicker(`${topicPrefix}/${String(data.symbol)}`, {
               symbol: String(data.symbol),
               price: Number(data.price),
               change: data.change == null ? undefined : Number(data.change),
@@ -133,6 +169,7 @@ function subscribeStompTopics(
 
   return {
     close: () => {
+      listeners.forEach(listener => listener.close());
       closedByClient = true;
       if (reconnectTimer) window.clearTimeout(reconnectTimer);
       if (heartbeatTimer) window.clearInterval(heartbeatTimer);
@@ -192,6 +229,7 @@ export function subscribeBinanceCandle(
   return subscribeStompTopics([symbol], prefix, idPrefix, (ticker) => {
     const price = ticker.price;
     onCandle({
+      ts: ticker.ts,
       // 기기 시계가 어긋나면 봉 마감 즈음 가짜 캔들 생성/새 봉 지연 → 서버 이벤트 시각(ts) 우선
       time: Math.floor((ticker.ts ?? Date.now()) / 1000),
       open: price,
@@ -236,7 +274,7 @@ export function subscribeBinanceKline(
     socket = new WebSocket(getWebSocketUrl(), ['v12.stomp']);
     socket.onopen = () => send(getConnectFrame());
     socket.onmessage = (event) => {
-      if (typeof event.data !== 'string') return;
+      if (closedByClient || typeof event.data !== 'string') return;
       for (const frame of parseStompFrames(event.data)) {
         const command = getFrameCommand(frame);
         if (command === 'CONNECTED') {
@@ -249,8 +287,12 @@ export function subscribeBinanceKline(
         if (command !== 'MESSAGE') continue;
         try {
           const d = JSON.parse(getFrameBody(frame));
-          if (d && d.time != null) {
+          if (d && d.time != null && Number.isFinite(Number(d.close)) && Number(d.close) > 0) {
+            publishRealtimeTicker(`/topic/binance-${market}/${symbol}`, {
+              symbol, price: Number(d.close), ts: d.ts == null ? undefined : Number(d.ts),
+            });
             onCandle({
+              ts: d.ts == null ? undefined : Number(d.ts),
               time: Number(d.time), open: Number(d.open), high: Number(d.high),
               low: Number(d.low), close: Number(d.close), volume: Number(d.volume),
             });
@@ -280,120 +322,21 @@ export function subscribeBinanceKline(
   };
 }
 
-/**
- * [실행 흐름]
- * 1. 타임프레임(channel)에 맞는 Bitget WebSocket 채널을 구독한다.
- * 2. 서버에서 실시간 캔들 데이터가 오면 onCandle 콜백을 호출한다.
- */
+/** Bitget 가격 틱도 헤더·목록과 같은 스트림으로 전달한다. */
 export function subscribeCoinCandle(
   symbol: string,
-  channel: string,
+  _channel: string,
   onCandle: (candle: CandleMessage) => void,
   productType?: string
 ): Subscription {
-  const isFutures = !!productType;
-  const topic = isFutures ? `/topic/coin-futures/${symbol}` : `/topic/coin/${symbol}`;
-  let socket: WebSocket | null = null;
-  let closedByClient = false;
-  let reconnectTimer: number | undefined;
-  let heartbeatTimer: number | undefined;
-
-  function send(frame: string) {
-    if (socket?.readyState === WebSocket.OPEN) {
-      socket.send(`${frame}\0`);
-    }
-  }
-
-  function connect() {
-    socket = new WebSocket(getWebSocketUrl(), ['v12.stomp']);
-
-    socket.onopen = () => {
-      send(getConnectFrame());
-    };
-
-    socket.onmessage = (event) => {
-      if (typeof event.data !== 'string') {
-        return;
-      }
-
-      for (const frame of parseStompFrames(event.data)) {
-        const command = getFrameCommand(frame);
-
-        if (command === 'CONNECTED') {
-          send(`SUBSCRIBE\nid:coin-${symbol}\ndestination:${topic}\n\n`);
-          heartbeatTimer = window.setInterval(() => {
-            if (socket?.readyState === WebSocket.OPEN) {
-              socket.send('\n');
-            }
-          }, 10000);
-          continue;
-        }
-
-        if (command !== 'MESSAGE') {
-          continue;
-        }
-
-        try {
-          const data = JSON.parse(getFrameBody(frame));
-          // [수정] 백엔드 CoinRealtimeWebSocketService의 페이로드 포맷 처리
-          if (data.price) {
-            onCandle({
-              time: Math.floor((data.ts || Date.now()) / 1000),
-              open: Number(data.price),
-              high: Number(data.price),
-              low: Number(data.price),
-              close: Number(data.price),
-              volume: Number(data.volume || 0)
-            });
-          } else if (Array.isArray(data)) {
-            // Bitget 원본 포맷 지원 (폴백)
-            onCandle({
-              time: Math.floor(Number(data[0]) / 1000),
-              open: Number(data[1]),
-              high: Number(data[2]),
-              low: Number(data[3]),
-              close: Number(data[4]),
-              volume: Number(data[5])
-            });
-          }
-        } catch {
-          // Ignore
-        }
-      }
-    };
-
-    socket.onclose = () => {
-      if (heartbeatTimer) {
-        window.clearInterval(heartbeatTimer);
-      }
-
-      if (!closedByClient) {
-        reconnectTimer = window.setTimeout(() => {
-          if (!closedByClient) {
-            connect();
-          }
-        }, 2000);
-      }
-    };
-  }
-
-  connect();
-
-  return {
-    close: () => {
-      closedByClient = true;
-      if (reconnectTimer) {
-        window.clearTimeout(reconnectTimer);
-      }
-      if (heartbeatTimer) {
-        window.clearInterval(heartbeatTimer);
-      }
-      if (socket?.readyState === WebSocket.OPEN) {
-        send(`UNSUBSCRIBE\nid:coin-${symbol}\n\n`); // SUBSCRIBE와 동일 id여야 서버가 구독 해제를 인식
-        send('DISCONNECT\n\n');
-      }
-      socket?.close();
-    }
-  };
+  const prefix = productType ? '/topic/coin-futures' : '/topic/coin';
+  return subscribeStompTopics([symbol], prefix, 'coin', (ticker) => {
+    onCandle({
+      ts: ticker.ts,
+      time: Math.floor((ticker.ts ?? Date.now()) / 1000),
+      open: ticker.price, high: ticker.price, low: ticker.price, close: ticker.price,
+      volume: ticker.volume ?? 0,
+    });
+  });
 }
 import { getToken } from '../client';

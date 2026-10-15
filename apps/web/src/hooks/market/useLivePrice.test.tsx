@@ -28,6 +28,76 @@ describe('useLivePrice lifecycle', () => {
     expect(hook.result()).toMatchObject({ price: 100, dailyOpen: 90, ready: true });
   });
 
+  it.each([
+    { exchange: 'BINANCE' as const, fallbackOpen: null },
+    { exchange: 'BITGET' as const, fallbackOpen: 80 },
+  ])('$exchange WS가 먼저 ready가 되면 늦은 REST는 가격 대신 dailyOpen만 보강한다', async ({ exchange, fallbackOpen }) => {
+    const rest = deferred<ReturnType<typeof ticker>>();
+    const daily = deferred<number | null>();
+    mocks.fetchTicker.mockReturnValue(rest.promise);
+    const hook = await renderHook(useLivePrice, { ...base, exchange, loadDailyOpen: () => daily.promise });
+    act(() => mocks.callbacks[0]({ symbol: 'BTCUSDT', price: 110 }));
+    expect(hook.result()).toMatchObject({ price: 110, dailyOpen: null, ready: true, status: 'ready' });
+    act(() => mocks.callbacks[0]({ symbol: 'BTCUSDT', price: 120 }));
+    await act(async () => rest.resolve(ticker(100, 80)));
+    expect(hook.result()).toMatchObject({ price: 120, dailyOpen: fallbackOpen, ready: true });
+    await act(async () => daily.resolve(90));
+    expect(hook.result()).toMatchObject({ price: 120, dailyOpen: 90, ready: true });
+  });
+
+  it('새 key의 첫 WS는 먼저 받은 dailyOpen과 함께 준비되고 이전 subscription은 무시한다', async () => {
+    const nextRest = deferred<ReturnType<typeof ticker>>();
+    const nextDaily = deferred<number | null>();
+    mocks.fetchTicker.mockResolvedValueOnce(ticker(100)).mockReturnValueOnce(nextRest.promise);
+    const hook = await renderHook(useLivePrice, base);
+    await act(async () => {});
+    const oldCallback = mocks.callbacks[0];
+    await hook.rerender({ ...base, symbol: 'ETHUSDT', loadDailyOpen: () => nextDaily.promise });
+    await act(async () => nextDaily.resolve(200));
+    expect(hook.result()).toMatchObject({ price: 100, dailyOpen: 90, ready: false });
+    act(() => mocks.callbacks[1]({ symbol: 'ETHUSDT', price: 220 }));
+    act(() => oldCallback({ symbol: 'BTCUSDT', price: 999 }));
+    expect(hook.result()).toMatchObject({ price: 220, dailyOpen: 200, readySymbol: 'ETHUSDT', ready: true });
+    await act(async () => nextRest.resolve(ticker(210, 999)));
+    expect(hook.result()).toMatchObject({ price: 220, dailyOpen: 200, ready: true });
+  });
+
+  it('유효 WS 이후 REST timeout과 retry는 ready 가격을 보존하고 rollover를 중복 예약하지 않는다', async () => {
+    vi.useFakeTimers();
+    mocks.fetchTicker.mockReturnValueOnce(new Promise(() => {})).mockResolvedValueOnce(ticker(100));
+    const hook = await renderHook(useLivePrice, base);
+    for (const price of [0, -1, NaN, Infinity]) {
+      act(() => mocks.callbacks[0]({ symbol: 'BTCUSDT', price }));
+    }
+    expect(hook.result()).toMatchObject({ price: null, ready: false, status: 'loading' });
+    act(() => mocks.callbacks[0]({ symbol: 'BTCUSDT', price: 120 }));
+    await act(async () => vi.advanceTimersByTimeAsync(15_000));
+    expect(hook.result()).toMatchObject({ price: 120, dailyOpen: 90, ready: true, status: 'ready' });
+    await act(async () => vi.advanceTimersByTimeAsync(3_000));
+    expect(mocks.fetchTicker).toHaveBeenCalledTimes(2);
+    expect(hook.result()).toMatchObject({ price: 120, dailyOpen: 90, ready: true });
+    expect(vi.getTimerCount()).toBe(1);
+    await hook.unmount();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('WS로 준비된 뒤 UTC rollover 시가를 갱신하면 후속 WS가 이전 시가로 되돌리지 않는다', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-15T23:59:59.000Z'));
+    const rest = deferred<ReturnType<typeof ticker>>();
+    const daily = vi.fn().mockResolvedValueOnce(90).mockResolvedValueOnce(95);
+    mocks.fetchTicker.mockReturnValue(rest.promise);
+    const hook = await renderHook(useLivePrice, { ...base, loadDailyOpen: daily });
+    act(() => mocks.callbacks[0]({ symbol: 'BTCUSDT', price: 110 }));
+    await act(async () => rest.resolve(ticker(100)));
+    expect(vi.getTimerCount()).toBe(1);
+    await act(async () => vi.advanceTimersByTimeAsync(6_000));
+    act(() => mocks.callbacks[0]({ symbol: 'BTCUSDT', price: 120 }));
+    expect(hook.result()).toMatchObject({ price: 120, dailyOpen: 95, ready: true });
+    expect(daily).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(1);
+  });
+
   it('full-key A→B→A는 새 loading이며 이전 subscription callback과 응답을 폐기한다', async () => {
     const a1 = deferred<ReturnType<typeof ticker>>(); const b = deferred<ReturnType<typeof ticker>>(); const a2 = deferred<ReturnType<typeof ticker>>();
     mocks.fetchTicker.mockReturnValueOnce(a1.promise).mockReturnValueOnce(b.promise).mockReturnValueOnce(a2.promise);

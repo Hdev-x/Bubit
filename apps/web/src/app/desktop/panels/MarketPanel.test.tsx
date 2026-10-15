@@ -1,116 +1,136 @@
 // @vitest-environment jsdom
-
 import { act } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanupRenderComponents, renderComponent } from '../../../test/renderComponent';
 import type { CoinTicker } from '../../../shared/types/market';
-import { MarketPanel } from './MarketPanel';
 
-const tickers: CoinTicker[] = Array.from({ length: 60 }, (_, i) => ({
-  symbol: `COIN${String(i).padStart(2, '0')}USDT`, baseSymbol: `COIN${i}`, quoteSymbol: 'USDT',
-  name: `Coin ${i}`, last: i + 1, change: 0, changeRate: 0, volume: 60 - i, tickDecimals: 2,
+const tickers: CoinTicker[] = Array.from({ length: 160 }, (_, i) => ({
+  symbol: `COIN${String(i).padStart(3, '0')}USDT`, baseSymbol: `COIN${i}`, quoteSymbol: 'USDT',
+  name: `Coin ${i}`, last: i + 1, change: 0, changeRate: 0, volume: 160 - i, tickDecimals: 2,
 }));
-const mocks = vi.hoisted(() => ({ load: vi.fn(), binanceFutures: vi.fn(), bitgetFutures: vi.fn() }));
-const deferred = <T,>() => { let resolve!: (value: T) => void; let reject!: (reason?: unknown) => void; const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
-
-vi.mock('../../../hooks/ui/useDelayedReady', () => ({ useDelayedReady: () => true }));
+const mocks = vi.hoisted(() => ({ futures: vi.fn(), spot: vi.fn(), bitget: vi.fn(), upbit: vi.fn(), subscribe: vi.fn() }));
+const deferred = <T,>() => { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done; }); return { promise, resolve }; };
+vi.mock('../../../api/server/marketApi', () => ({
+  fetchBinanceFuturesTickers: mocks.futures, fetchBinanceSpotTickers: mocks.spot,
+  fetchCoinFuturesTickers: mocks.bitget, fetchCoinTickers: vi.fn(), fetchCoinLogos: () => Promise.resolve({}),
+}));
+vi.mock('../../../api/exchange/krw/krwTickers', () => ({ fetchUpbitSpotTickers: mocks.upbit, fetchBithumbSpotTickers: vi.fn() }));
 vi.mock('../../../hooks/market/usePricePrecision', () => ({ usePricePrecision: () => ({ precisionMap: new Map() }) }));
 vi.mock('../../../api/server/coinRealtime', () => ({
-  subscribeBitgetSpotTickers: vi.fn(), subscribeBitgetFuturesTickers: mocks.bitgetFutures,
-  subscribeBinanceSpotTickers: vi.fn(), subscribeBinanceFuturesTickers: mocks.binanceFutures,
+  subscribeBitgetSpotTickers: mocks.subscribe, subscribeBitgetFuturesTickers: mocks.subscribe,
+  subscribeBinanceSpotTickers: mocks.subscribe, subscribeBinanceFuturesTickers: mocks.subscribe,
 }));
-vi.mock('../../../api/exchange/krw/krwRealtime', () => ({ subscribeKrwTickers: vi.fn() }));
-vi.mock('./marketShared', () => ({
-  loadExchangeTickers: mocks.load,
-  useDesktopFavorites: () => ({ isFav: () => false, toggleFav: vi.fn() }),
-  useCoinLogos: () => ({}), formatVolume: () => '', formatVolumeKrw: () => '',
-}));
+vi.mock('../../../api/exchange/krw/krwRealtime', () => ({ subscribeKrwTickers: mocks.subscribe }));
 
-afterEach(async () => { await cleanupRenderComponents(); vi.clearAllMocks(); });
+let MarketPanel: typeof import('./MarketPanel').MarketPanel;
+let FavoritesPanel: typeof import('./FavoritesPanel').FavoritesPanel;
+beforeEach(async () => {
+  vi.resetModules(); vi.resetAllMocks();
+  const stored = new Map<string, string>();
+  vi.stubGlobal('localStorage', { getItem: (key: string) => stored.get(key) ?? null, setItem: (key: string, value: string) => stored.set(key, value) });
+  mocks.subscribe.mockReturnValue({ close: vi.fn() });
+  ({ MarketPanel } = await import('./MarketPanel'));
+  ({ FavoritesPanel } = await import('./FavoritesPanel'));
+});
+afterEach(async () => { await cleanupRenderComponents(); vi.unstubAllGlobals(); vi.useRealTimers(); });
+const click = async (container: HTMLElement, selector: string, label: string) => {
+  const button = [...container.querySelectorAll(selector)].find(element => element.textContent?.includes(label))!;
+  await act(async () => button.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+};
+const rows = (container: HTMLElement) => container.querySelectorAll('.wm-row:not(.wm-row-skel)');
 
-describe('MarketPanel selection reset', () => {
-  it('무한 스크롤 뒤 검색·정렬·거래소 전환에서 40개로 복원하고 KRW 거래소는 Spot을 선택한다', async () => {
-    mocks.load.mockResolvedValue({ spot: tickers, futures: tickers });
+describe('MarketPanel loading and shared snapshots', () => {
+  it('1.5초가 지나도 조회 중에는 스켈레톤을 유지하고 실제 목록 도착 시 페이드한다', async () => {
+    vi.useFakeTimers();
+    const request = deferred<CoinTicker[]>(); mocks.futures.mockReturnValue(request.promise);
     const view = await renderComponent(<MarketPanel active />);
-    await act(async () => {});
+    await act(async () => vi.advanceTimersByTimeAsync(3000));
+    expect(view.container.querySelectorAll('.wm-row-skel')).toHaveLength(12);
+    expect(view.container.querySelector('.wm-list-fade')).toBeNull();
+    await act(async () => request.resolve(tickers));
+    expect(view.container.querySelectorAll('.wm-row-skel')).toHaveLength(0);
+    expect(rows(view.container)).toHaveLength(40);
+    expect(view.container.querySelector('.wm-list-fade')).not.toBeNull();
+  });
+
+  it('시장 전환에 캐시를 즉시 재사용하고 잘못된 시장 값과 이전 WS callback을 섞지 않는다', async () => {
+    mocks.futures.mockResolvedValue([tickers[0]]);
+    mocks.spot.mockResolvedValue([{ ...tickers[0], last: 777 }]);
+    const callbacks: Array<(ticker: { symbol: string; price: number }) => void> = [];
+    mocks.subscribe.mockImplementation((_symbols, callback) => { callbacks.push(callback); return { close: vi.fn() }; });
+    const view = await renderComponent(<MarketPanel active />);
+    const oldCallback = callbacks[0];
+    await click(view.container, '.wm-tabs button', 'Spot');
+    expect(view.container.querySelector('.wm-row-price strong')?.textContent).toContain('777');
+    await click(view.container, '.wm-tabs button', 'Futures');
+    act(() => oldCallback({ symbol: tickers[0].symbol, price: 999 }));
+    expect(view.container.querySelector('.wm-row-price strong')?.textContent).toBe('1.00');
+    expect(mocks.futures).toHaveBeenCalledTimes(1);
+    expect(mocks.spot).toHaveBeenCalledTimes(1);
+    expect(mocks.futures).toHaveBeenCalledWith({ throwOnError: true });
+  });
+
+  it('첫 관심종목은 마켓의 공유 snapshot으로 즉시 나타나고 같은 시장을 재조회하지 않는다', async () => {
+    mocks.futures.mockResolvedValue(tickers);
+    const view = await renderComponent(<><MarketPanel active /><FavoritesPanel active /></>);
+    expect(view.container.textContent).toContain('관심종목이 없어요.');
+    const star = view.container.querySelector('.wm-row-star')!;
+    await act(async () => star.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    const favorites = view.container.querySelectorAll('.wm')[1];
+    expect(favorites.querySelectorAll('.wm-row')).toHaveLength(1);
+    expect(favorites.querySelector('.wm-row-price strong')?.textContent).toBe('1.00');
+    expect(favorites.querySelector('.wm-row-skel')).toBeNull();
+    expect(mocks.futures).toHaveBeenCalledTimes(1);
+    expect(mocks.spot).not.toHaveBeenCalled();
+  });
+
+  it('실패와 빈 결과를 표시하며 재시도 후 목록으로 복구한다', async () => {
+    mocks.futures.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce([]).mockResolvedValueOnce(tickers);
+    const view = await renderComponent(<MarketPanel active />);
+    expect(view.container.textContent).toContain('종목 목록을 불러오지 못했어요.');
+    await click(view.container, 'button', '다시 불러오기');
+    expect(view.container.textContent).toContain('표시할 종목이 없어요.');
+    await click(view.container, 'button', '다시 불러오기');
+    expect(rows(view.container)).toHaveLength(40);
+  });
+
+  it('스크롤로 40개씩 확장해도 DOM·WS는 화면 주변 행만 유지하고 정렬·거래소 전환에서 복원한다', async () => {
+    mocks.futures.mockResolvedValue(tickers); mocks.upbit.mockResolvedValue(tickers);
+    const view = await renderComponent(<MarketPanel active />);
     const list = view.container.querySelector('.wm-list') as HTMLDivElement;
-    Object.defineProperties(list, { scrollHeight: { value: 1000 }, clientHeight: { value: 500 }, scrollTop: { value: 450, writable: true } });
-    const grow = async () => act(async () => {
-      list.scrollTop = 450;
-      list.dispatchEvent(new Event('scroll', { bubbles: true }));
-    });
-    await grow();
-    expect(view.container.querySelectorAll('.wm-row')).toHaveLength(60);
-
-    const nameSort = [...view.container.querySelectorAll('.wm-colhead button')].find((button) => button.textContent?.includes('Name'))!;
-    await act(async () => nameSort.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect(view.container.querySelectorAll('.wm-row')).toHaveLength(40);
-
-    await grow();
-    const spot = [...view.container.querySelectorAll('.wm-tabs button')].find((button) => button.textContent === 'Spot')!;
-    await act(async () => spot.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect(view.container.querySelectorAll('.wm-row')).toHaveLength(40);
-
-    await grow();
-    const search = view.container.querySelector('input') as HTMLInputElement;
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(search, 'COIN');
-      search.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-    expect(view.container.querySelectorAll('.wm-row')).toHaveLength(40);
-
-    await grow();
-    const binance = [...view.container.querySelectorAll('button')].find((button) => button.textContent?.includes('Binance'))!;
-    await act(async () => binance.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect(view.container.querySelectorAll('.wm-row')).toHaveLength(60);
-
-    const upbit = [...view.container.querySelectorAll('button')].find((button) => button.textContent?.includes('Upbit'))!;
-    await act(async () => upbit.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    Object.defineProperties(list, { scrollHeight: { value: 2160, configurable: true }, clientHeight: { value: 500 }, scrollTop: { value: 1710, writable: true } });
+    await act(async () => list.dispatchEvent(new Event('scroll', { bubbles: true })));
+    expect(rows(view.container)).toHaveLength(40);
+    expect(view.container.textContent).toContain('COIN059USDT.P');
+    expect(mocks.subscribe.mock.calls.at(-1)?.[0]).toHaveLength(40);
+    const subscriptions = mocks.subscribe.mock.calls.length;
+    list.scrollTop = 1764;
+    await act(async () => list.dispatchEvent(new Event('scroll', { bubbles: true })));
+    expect(mocks.subscribe).toHaveBeenCalledTimes(subscriptions);
+    Object.defineProperty(list, 'scrollHeight', { value: 4320 }); list.scrollTop = 3600;
+    await act(async () => list.dispatchEvent(new Event('scroll', { bubbles: true })));
+    expect(rows(view.container)).toHaveLength(40);
+    expect(view.container.textContent).toContain('COIN079USDT.P');
+    await click(view.container, '.wm-colhead button', 'Name');
+    expect(view.container.textContent).toContain('COIN000USDT.P');
+    expect(list.scrollTop).toBe(0);
+    await click(view.container, '.wm-chips button', 'Upbit');
     expect(view.container.querySelector('.wm-tabs .active')?.textContent).toBe('Spot');
+    expect(rows(view.container)).toHaveLength(40);
   });
 
-  it('비활성·재활성과 거래소 전환은 스켈레톤을 보이고 늦은 이전 REST 응답을 버린다', async () => {
-    const first = deferred<{ spot: CoinTicker[]; futures: CoinTicker[] }>();
-    const second = deferred<{ spot: CoinTicker[]; futures: CoinTicker[] }>();
-    mocks.load.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+  it('느린 요청이 끝난 뒤 5초 후 재조회하며 실패해도 기존 행을 유지한다', async () => {
+    vi.useFakeTimers();
+    const slow = deferred<CoinTicker[]>();
+    mocks.futures.mockReturnValueOnce(slow.promise).mockRejectedValueOnce(new Error('offline'));
     const view = await renderComponent(<MarketPanel active />);
-    expect(view.container.querySelectorAll('.wm-row')).toHaveLength(0);
-    await view.rerender(<MarketPanel active={false} />);
-    await view.rerender(<MarketPanel active />);
-    expect(view.container.querySelectorAll('.wm-row')).toHaveLength(0);
-    await act(async () => second.resolve({ spot: tickers, futures: tickers }));
-    expect(view.container.textContent).toContain('COIN00USDT.P');
-    await act(async () => first.resolve({ spot: [], futures: [] }));
-    expect(view.container.textContent).toContain('COIN00USDT.P');
-  });
-
-  it('cleanup 뒤 WS callback은 표시를 갱신하지 않는다', async () => {
-    mocks.load.mockResolvedValue({ spot: tickers, futures: tickers });
-    let callback: ((ticker: { symbol: string; price: number; changeRate: number }) => void) | undefined;
-    mocks.binanceFutures.mockImplementation((_symbols, cb) => { callback = cb; return { close: vi.fn() }; });
-    const view = await renderComponent(<MarketPanel active />); await act(async () => {});
-    await view.rerender(<MarketPanel active={false} />);
-    act(() => callback?.({ symbol: 'COIN00USDT', price: 999, changeRate: 0.5 }));
-    await view.rerender(<MarketPanel active />); await act(async () => {});
-    expect(view.container.querySelector('.wm-row-price strong')?.textContent).not.toContain('999');
-  });
-
-  it('A→B→A 전환에서 이전 A WS 값을 되살리지 않는다', async () => {
-    const at = (price: number) => ({ spot: [], futures: [{ ...tickers[0], last: price }] });
-    mocks.load.mockResolvedValueOnce(at(10)).mockResolvedValueOnce(at(20)).mockResolvedValueOnce(at(30));
-    const callbacks: Array<(ticker: { symbol: string; price: number; changeRate: number }) => void> = [];
-    mocks.binanceFutures.mockImplementation((_symbols, cb) => { callbacks.push(cb); return { close: vi.fn() }; });
-    mocks.bitgetFutures.mockImplementation(() => ({ close: vi.fn() }));
-    const view = await renderComponent(<MarketPanel active />); await act(async () => {});
-    act(() => callbacks[0]({ symbol: 'COIN00USDT', price: 111, changeRate: 0 }));
-    expect(view.container.querySelector('.wm-row-price strong')?.textContent).toContain('111');
-    const bitget = [...view.container.querySelectorAll('.wm-chips button')].find((button) => button.textContent?.includes('Bitget'))!;
-    await act(async () => bitget.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    const binance = [...view.container.querySelectorAll('.wm-chips button')].find((button) => button.textContent?.includes('Binance'))!;
-    await act(async () => binance.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    act(() => callbacks[0]({ symbol: 'COIN00USDT', price: 999, changeRate: 0 }));
-    expect(view.container.querySelector('.wm-row-price strong')?.textContent).toContain('30');
-    expect(view.container.querySelector('.wm-row-price strong')?.textContent).not.toContain('111');
-    expect(view.container.querySelector('.wm-row-price strong')?.textContent).not.toContain('999');
+    await act(async () => vi.advanceTimersByTimeAsync(15000));
+    expect(mocks.futures).toHaveBeenCalledTimes(1);
+    await act(async () => slow.resolve(tickers));
+    await act(async () => vi.advanceTimersByTimeAsync(4999));
+    expect(mocks.futures).toHaveBeenCalledTimes(1);
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+    expect(mocks.futures).toHaveBeenCalledTimes(2);
+    expect(rows(view.container)).toHaveLength(40);
   });
 });

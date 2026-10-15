@@ -5,13 +5,13 @@ import botzMark from '../../../assets/botz-mark.svg';
 
 interface Props {
   onSuccess: (user: AuthUser) => void;
+  onBrowse?: () => void;
 }
 
 /** ============================================================
- * 로그인 화면. 로그인 성공 전에는 이 화면만 보이고,
- * 성공하면 onSuccess로 사용자 정보를 올려보내 앱(탭)으로 진입한다.
+ * 로그인이 필요한 탭에서 표시하며 성공 후 요청한 탭으로 돌아간다.
  * ============================================================ */
-export default function LoginPage({ onSuccess }: Props) {
+export default function LoginPage({ onSuccess, onBrowse }: Props) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +49,7 @@ export default function LoginPage({ onSuccess }: Props) {
               <span style={styles.brandText}>Bubit</span>
               <span className="brand-beta-badge">Beta</span>
             </div>
-            <button type="button" style={styles.linkButton}>회원가입</button>
+            {onBrowse && <button type="button" style={styles.linkButton} onClick={onBrowse}>둘러보기</button>}
           </header>
 
           <form style={styles.form} onSubmit={handleSubmit}>
@@ -159,7 +159,7 @@ const styles: Record<string, CSSProperties> = {
     width: '100%',
     maxWidth: 500,
     margin: '0 auto',
-    padding: 'calc(12px + env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom))',
+    padding: 'calc(12px + env(safe-area-inset-top)) 16px calc(88px + env(safe-area-inset-bottom))',
     boxSizing: 'border-box',
     display: 'flex',
     flexDirection: 'column',

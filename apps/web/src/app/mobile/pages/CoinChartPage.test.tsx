@@ -60,7 +60,7 @@ vi.mock('../../../chart/indicators/IndicatorSheet', () => ({ default: ({ isOpen,
 vi.mock('../../../chart/settings/ChartSettingsSheet', () => ({ default: () => null }));
 vi.mock('../../../chart/settings/theme', () => ({ PRESET_THEMES: [{}], getThemeCssVars: () => ({}) }));
 
-const baseProps = { symbol: 'BTCUSDT', active: true, onSelectSymbol: vi.fn() };
+const baseProps = { canUseIndicators: true, symbol: 'BTCUSDT', active: true, onSelectSymbol: vi.fn() };
 const tracker = (signature: string): TrackerState => ({
   symbol: 'BTCUSDT', signature, monitorKind: 'pattern_4h', type: 'bull', phase: 'scanning', mid: 1,
   obTime: 1, lookAfterTime: 1, waitCount: 0, holdCount: 0,
@@ -363,4 +363,19 @@ describe('CoinChartPage imperative state', () => {
     expect(view.container.querySelector('.chart-symbol-name')?.textContent).toBe('BTCUSDT.P');
     expect(view.container.querySelector('[role="status"]')?.textContent).toContain('1W');
   });
+  it('guest는 지표를 표시하지 않고 설정 진입 때 로그인을 요청한다', async () => {
+    const onLogin = vi.fn();
+    const view = await renderComponent(<CoinChartPage {...baseProps} canUseIndicators={false} onLogin={onLogin} />);
+    const chart = view.container.querySelector('[data-testid="chart"]') as HTMLElement;
+    expect(chart.dataset.ma).toBe('0');
+    expect(chart.dataset.mtf).toBe('');
+    const indicators = view.container.querySelector('button[title="보조지표"]') as HTMLButtonElement;
+    await act(async () => indicators.click());
+    expect(onLogin).toHaveBeenCalledOnce();
+    expect(view.container.textContent).not.toContain('change-settings');
+    await view.rerender(<CoinChartPage {...baseProps} onLogin={onLogin} />);
+    await act(async () => indicators.click());
+    expect(view.container.textContent).toContain('change-settings');
+  });
+
 });

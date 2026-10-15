@@ -108,7 +108,9 @@ class WebSocketAuthenticationIntegrationTest {
                     "/topic/binance-spot/TESTUSDT",
                     "/topic/binance-futures/TESTUSDT",
                     "/topic/binance-kline/spot/TESTUSDT/1m",
-                    "/topic/binance-kline/futures/TESTUSDT/1M")) {
+                    "/topic/binance-kline/futures/TESTUSDT/1M",
+                    "/topic/community/board",
+                    "/topic/community/feed/bitget/futures/TESTUSDT")) {
                 BlockingQueue<byte[]> received = new LinkedBlockingQueue<>();
                 StompSession.Subscription subscription = session.subscribe(destination, new StompFrameHandler() {
                     @Override

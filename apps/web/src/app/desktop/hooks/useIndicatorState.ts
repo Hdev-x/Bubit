@@ -3,9 +3,9 @@ import { usePersistentState } from '../../../hooks/ui/usePersistentState';
 import type { IndicatorSettings } from '../../../chart/overlays/ChartOverlay';
 import { DEFAULT_MA_SETTINGS, DEFAULT_BB_SETTING, DEFAULT_PIVOT_SETTING } from '../../../chart/indicators/settings';
 import type { MASetting, BBSetting, PivotSetting } from '../../../chart/indicators/IndicatorSheet';
-import { INDICATORS_OFF, MA_OFF, pivotOff } from '../lib/indicatorDefaults';
+import { INDICATORS_OFF, MA_OFF, pivotOff } from '../../../chart/indicators/visibility';
 
-// Desktop 지표 상태 — SMC·MA·BB·피벗 설정(저장), 비관리자용 eff* 차단값, 툴바 드롭다운·그룹 접힘. DesktopApp에서 옮김 .
+// Desktop 지표 상태 — SMC·MA·BB·피벗 설정(저장), 비로그인용 eff* 차단값, 툴바 드롭다운·그룹 접힘. DesktopApp에서 옮김 .
 // 저장 키는 Mobile CoinChartPage와 같아 종목 이동·새로고침에도 유지된다.
 export function useIndicatorState({ indiOff }: { indiOff: boolean }) {
   const [indiOpen, setIndiOpen] = useState(false);
@@ -19,7 +19,7 @@ export function useIndicatorState({ indiOff }: { indiOff: boolean }) {
   const [maSettings, setMaSettings] = usePersistentState<MASetting[]>('chart_ma_settings', DEFAULT_MA_SETTINGS);
   const [bbSetting, setBbSetting] = usePersistentState<BBSetting>('chart_bb_setting', DEFAULT_BB_SETTING, true);
   const [pivotSetting, setPivotSetting] = usePersistentState<PivotSetting>('chart_pivot_setting', DEFAULT_PIVOT_SETTING, true);
-  // 지표는 관리자(ADMIN)에게만 공개. 일반 유저·비로그인은 차트 지표 전부 끔(저장값은 유지, 표시만 차단)
+  // 지표는 로그인 사용자에게 공개. 비로그인은 차트 지표 전부 끔(저장값은 유지, 표시만 차단)
   const effIndicatorSettings = indiOff ? INDICATORS_OFF : indicatorSettings;
   const effMaSettings = indiOff ? MA_OFF : maSettings;
   const effBbSetting = indiOff ? { ...bbSetting, show: false } : bbSetting;

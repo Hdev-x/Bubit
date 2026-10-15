@@ -3,14 +3,14 @@
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Candle } from '../../shared/types/market';
-import { subscribeCoinCandle } from '../../api/server/coinRealtime';
+import { listenRealtimeTicker, subscribeCoinCandle, type RealtimeTicker } from '../../api/server/coinRealtime';
 import { subscribeKrwCandle } from '../../api/exchange/krw/krwRealtime';
 import { subscribeBitgetKline } from '../../api/exchange/bitget/klineRealtime';
 import { cleanupRenderHooks, deferred, renderHook } from '../../test/renderHook';
 import { useCoinCandles } from './useCoinCandles';
 
 vi.mock('../../api/server/coinRealtime', () => ({
-  subscribeCoinCandle: vi.fn(), subscribeBinanceCandle: vi.fn(), subscribeBinanceKline: vi.fn(),
+  listenRealtimeTicker: vi.fn(), subscribeCoinCandle: vi.fn(), subscribeBinanceCandle: vi.fn(), subscribeBinanceKline: vi.fn(),
 }));
 vi.mock('../../api/exchange/krw/krwRealtime', () => ({ subscribeKrwCandle: vi.fn() }));
 vi.mock('../../api/exchange/bitget/klineRealtime', () => ({ subscribeBitgetKline: vi.fn() }));
@@ -19,6 +19,7 @@ const candle = (close: number): Candle => ({ time: close, open: close - 1, high:
 const FALLBACK = [candle(9)];
 type Loader = (granularity: string, limit: number, endTime?: string) => Promise<Candle[]>;
 type Props = { symbol: string; load: Loader; clear?: boolean; granularity?: string; krw?: boolean; active?: boolean; kline?: boolean };
+const priceCallbacks: Array<(ticker: RealtimeTicker) => void> = [];
 const callbacks: Array<(ticker: { time: number; open: number; high: number; low: number; close: number; volume: number }) => void> = [];
 
 const getBucketTime = (time: number) => time;
@@ -33,6 +34,11 @@ const useSubject = ({ symbol, load, clear = false, granularity = '1h', krw = fal
 beforeEach(() => {
   vi.useFakeTimers();
   callbacks.length = 0;
+  priceCallbacks.length = 0;
+  vi.mocked(listenRealtimeTicker).mockImplementation((_topic, callback) => {
+    priceCallbacks.push(callback);
+    return { close: vi.fn() };
+  });
   vi.mocked(subscribeCoinCandle).mockImplementation((_symbol, _channel, callback) => {
     callbacks.push(callback);
     return { close: vi.fn() };
@@ -80,6 +86,21 @@ describe('useCoinCandles request state', () => {
     });
     await refresh;
     expect(hook.result()).toMatchObject({ livePrice: 100, candles: [initial] });
+  });
+
+  it('공유 현재가보다 늦은 kline은 가격을 되돌리지 않고 거래량만 보강한다', async () => {
+    const initial = { ...candle(100), time: 3600 };
+    const load = vi.fn().mockResolvedValue([initial]);
+    const hook = await renderHook(useSubject, { symbol: 'BTCUSDT', load, kline: true });
+    await act(async () => {
+      priceCallbacks.at(-1)!({ symbol: 'BTCUSDT', price: 105, ts: 3_600_100 });
+      priceCallbacks.at(-1)!({ symbol: 'BTCUSDT', price: 103, ts: 3_600_200 });
+      const onKline = vi.mocked(subscribeBitgetKline).mock.calls.at(-1)![3];
+      onKline({ ...initial, ts: 3_600_000, close: 102, high: 102, volume: 30 });
+    });
+    expect(hook.result()).toMatchObject({ livePrice: 103 });
+    expect(hook.result().candles.at(-1)).toMatchObject({ close: 103, high: 105, volume: 30 });
+    expect(subscribeCoinCandle).not.toHaveBeenCalled();
   });
 
   it('kline OHLCV는 보호하고 과거 REST 보정과 다음 refresh는 허용한다', async () => {

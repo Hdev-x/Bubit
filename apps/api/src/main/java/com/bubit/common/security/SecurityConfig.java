@@ -2,6 +2,7 @@ package com.bubit.common.security;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -48,6 +49,12 @@ public class SecurityConfig {
             .cors(cors -> cors.configurationSource(corsConfigurationSource())) // CORS 활성화
             .csrf(csrf -> csrf.disable()) // 기존 POST/PUT 방어 비활성화
             .authorizeHttpRequests(auth -> auth
+                .requestMatchers(HttpMethod.GET,
+                    "/api/profiles/avatars/*",
+                    "/api/community/posts",
+                    "/api/community/posts/*/comments",
+                    "/api/community/images/*"
+                ).permitAll()
                 .requestMatchers(
                     "/",
                     "/index.html",

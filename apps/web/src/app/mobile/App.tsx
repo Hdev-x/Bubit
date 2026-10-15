@@ -3,15 +3,16 @@ import BottomTabBar, { type AppRoute } from './components/BottomTabBar';
 import AssetsPage from './pages/AssetsPage';
 import CoinChartPage from './pages/CoinChartPage';
 import CoinListPage from './pages/CoinListPage';
-import OrderPage from './pages/OrderPage';
+import MobileTradePage from './pages/MobileTradePage';
+import MyPageDialog from '../shared/account/MyPageDialog';
+import { useMobileSession } from './hooks/useMobileSession';
 import StrategyComingSoon from '../../shared/ui/StrategyComingSoon';
 import LoginPage from './pages/LoginPage';
-import { getToken } from '../../api/client';
-import { fetchMe, logout as authLogout, type AuthUser } from '../../api/server/authApi';
+import type { AuthUser } from '../../api/server/authApi';
 import { isBitgetSymbolSupported, prefetchBitgetSymbols } from '../../api/exchange/bitget/bitgetSymbols';
 import { prefetchBinanceSymbols } from '../../api/exchange/binance/binanceSymbols';
 import { useDocumentVisible } from '../../hooks/ui/usePageVisible';
-import { useRealtimeTickers } from '../../hooks/market/useRealtimePrices';
+import { listenRealtimeTicker } from '../../api/server/coinRealtime';
 import { loadWithTimeout } from '../../chart/hooks/loadWithTimeout';
 import { isKrwExchange, type ExchangeId } from '../../shared/constants/exchanges';
 
@@ -25,37 +26,21 @@ function getRoute(hash: string): AppRoute {
 }
 
 export default function App() {
-  // 인증 상태: checking(토큰 확인 중) → user 있음(앱) / 없음(로그인 화면)
-  const [authChecked, setAuthChecked] = useState(false);
-  const [user, setUser] = useState<AuthUser | null>(null);
+  const { authChecked, user, setUser, logout } = useMobileSession();
+  const [loginRequested, setLoginRequested] = useState(false);
+  const [myPageOpen, setMyPageOpen] = useState(false);
 
-  useEffect(() => {
-    // 앱 로딩 시 저장된 토큰 유효성 확인.
-    // 서버 순단(배포 중 재기동 등)으로 실패했지만 토큰이 살아 있으면(401/403 아님)
-    // 짧게 재시도해 순단을 흡수 — 멀쩡한 세션이 로그인 화면으로 떨어지는 것 방지.
-    let cancelled = false;
-    (async () => {
-      let u = await fetchMe();
-      if (!u && getToken()) {
-        for (const delayMs of [1500, 4000]) {
-          await new Promise((r) => setTimeout(r, delayMs));
-          if (cancelled) return;
-          u = await fetchMe();
-          if (u || !getToken()) break; // 성공했거나 토큰이 진짜 무효(삭제됨)면 종료
-        }
-      }
-      if (cancelled) return;
-      setUser(u);
-      setAuthChecked(true);
-    })();
-    return () => { cancelled = true; };
-  }, []);
+  function handleLogin(nextUser: AuthUser) {
+    setUser(nextUser);
+    setLoginRequested(false);
+  }
 
   function handleLogout() {
     tradeRequestSeqRef.current++;
     setTradeError(null);
-    authLogout();
-    setUser(null);
+    setMyPageOpen(false);
+    logout();
+    if (route !== '/' && route !== '/chart') navigate('/');
   }
 
   const [route, setRoute] = useState<AppRoute>(() => getRoute(window.location.hash));
@@ -66,31 +51,27 @@ export default function App() {
   const [selectedExchange, setSelectedExchange] = useState<ExchangeId>('BINANCE');
   const [selectedTickDecimals, setSelectedTickDecimals] = useState<number>(2);
 
-  // 실시간 탭 타이틀 업데이트
-  const isFutures = selectedProductType?.includes('FUTURES') ?? true;
-  const tickers = useRealtimeTickers(isKrwExchange(selectedExchange) ? [] : [selectedSymbol], isFutures);
-  const currentTicker = tickers[selectedSymbol];
-
+  // 차트는 자체 타이틀을 관리한다. 다른 탭은 화면이 이미 구독한 시세만 듣는다.
+  const isFutures = selectedProductType?.includes('FUTURES') ?? false;
   useEffect(() => {
-    if (route === '/chart') return;
-    if (selectedSymbol && currentTicker && currentTicker.price) {
-      const formattedPrice = currentTicker.price.toLocaleString(undefined, {
+    if (route === '/chart' || !visible) return;
+    document.title = 'Bubit';
+    if (isKrwExchange(selectedExchange)) return;
+    let listening = true;
+    const topic = selectedExchange === 'BINANCE'
+      ? `/topic/binance-${isFutures ? 'futures' : 'spot'}/${selectedSymbol}`
+      : `/topic/coin${isFutures ? '-futures' : ''}/${selectedSymbol}`;
+    const subscription = listenRealtimeTicker(topic, ticker => {
+      if (!listening || ticker.symbol !== selectedSymbol) return;
+      const price = ticker.price.toLocaleString(undefined, {
         minimumFractionDigits: selectedTickDecimals,
-        maximumFractionDigits: selectedTickDecimals
+        maximumFractionDigits: selectedTickDecimals,
       });
-
-      let rateStr = '';
-      if (currentTicker.changeRate !== undefined) {
-        const ratePercent = currentTicker.changeRate * 100;
-        const sign = ratePercent > 0 ? '+' : '';
-        // 스크린샷 요구사항: 등락률에 () 감싸고 화살표 제거 (예: (-0.61%) )
-        rateStr = ` (${sign}${ratePercent.toFixed(2)}%)`;
-      }
-      document.title = `${selectedSymbol} ${formattedPrice}${rateStr}`;
-    } else {
-      document.title = 'Bubit';
-    }
-  }, [route, selectedSymbol, currentTicker, selectedTickDecimals]);
+      const rate = ticker.changeRate == null ? '' : ` (${ticker.changeRate > 0 ? '+' : ''}${(ticker.changeRate * 100).toFixed(2)}%)`;
+      document.title = `${selectedSymbol} ${price}${rate}`;
+    });
+    return () => { listening = false; subscription.close(); };
+  }, [route, visible, selectedExchange, selectedSymbol, isFutures, selectedTickDecimals]);
 
   // 차트·마켓에서 트레이드 진입 시 현물/선물 마켓 지정(seq로 매번 재적용). 거래소는 항상 비트겟.
   const [tradeMarketReq, setTradeMarketReq] = useState<{ market: 'spot' | 'futures'; seq: number } | null>(null);
@@ -103,7 +84,7 @@ export default function App() {
   // 거래/자산/전략 탭바 공유 슬라이드 인디케이터 — 각 페이지가 활성 탭 위치(뷰포트 x,y)를 보고하면
   // App이 단일 바를 그 자리로 슬라이드시킨다(페이지 전환 시에도 바가 미끄러져 이동).
   const [tabBar, setTabBar] = useState<{ x: number; y: number } | null>(null);
-  const showTabBar = (route === '/orders' || route === '/assets' || route === '/strategy') && tabBar !== null;
+  const showTabBar = user && !loginRequested && (route === '/orders' || route === '/assets' || route === '/strategy') && tabBar !== null;
 
   useEffect(() => {
     tradeMountedRef.current = true;
@@ -120,6 +101,7 @@ export default function App() {
     }
 
     function syncRoute() {
+      setLoginRequested(false);
       setTradeError(null);
       const nextRoute = getRoute(window.location.hash);
       setRoute(nextRoute);
@@ -176,6 +158,7 @@ export default function App() {
   }, [route]);
 
   function navigate(nextRoute: AppRoute) {
+    setLoginRequested(false);
     tradeRequestSeqRef.current++;
     setTradeError(null);
     if (nextRoute === route) {
@@ -193,6 +176,13 @@ export default function App() {
     setTradeError(null);
     const sym = symbolArg ?? selectedSymbol;
     const market = marketArg ?? (selectedProductType ? 'futures' : 'spot');
+    if (!user) {
+      setSelectedSymbol(sym);
+      setSelectedProductType(market === 'futures' ? 'USDT-FUTURES' : undefined);
+      setTradeMarketReq(current => ({ market, seq: (current?.seq ?? 0) + 1 }));
+      navigate('/orders');
+      return;
+    }
     const controller = new AbortController();
     const supported = await loadWithTimeout(isBitgetSymbolSupported(sym, market), controller.signal).catch(() => true);
     if (!tradeMountedRef.current || requestSeq !== tradeRequestSeqRef.current || window.location.hash !== requestHash) return;
@@ -202,40 +192,70 @@ export default function App() {
       return;
     }
     setSelectedSymbol(sym);
+    setSelectedProductType(market === 'futures' ? 'USDT-FUTURES' : undefined);
     setTradeMarketReq(current => ({ market, seq: (current?.seq ?? 0) + 1 }));
     navigate('/orders');
   }
 
-  // 토큰 확인 중에는 빈 화면(깜빡임 방지)
-  if (!authChecked) {
-    return <div className="app-frame" style={{ background: '#0b0e11' }} />;
-  }
-
-  // 미로그인 → 로그인 화면만 노출 (탭/마켓/차트/거래/전략/자산 접근 차단)
-  if (!user) {
-    return (
-      <div className="app-frame">
-        <LoginPage onSuccess={setUser} />
-      </div>
-    );
-  }
+  const privateRoute = route === '/orders' || route === '/strategy' || route === '/assets';
+  const showLogin = !user && (loginRequested || privateRoute);
+  const pageActive = visible && !showLogin && !myPageOpen;
 
   return (
     <div className="app-frame">
-      <div style={{ display: route === '/' ? 'block' : 'none', height: '100%' }}>
-        {visitedRoutes.has('/') && <CoinListPage active={route === '/' && visible} selectedSymbol={selectedSymbol} onSelectSymbol={setSelectedSymbol} onOpenChart={() => navigate('/chart')} onOpenTrade={openTrade} onProductTypeChange={setSelectedProductType} onExchangeChange={setSelectedExchange} onTickDecimalsChange={setSelectedTickDecimals} onLogout={handleLogout} username={user.username} />}
+      {showLogin && (authChecked
+        ? <LoginPage onSuccess={handleLogin} onBrowse={() => { setLoginRequested(false); if (privateRoute) navigate('/'); }} />
+        : <p role="status">로그인 정보를 확인하고 있습니다.</p>)}
+      <div style={{ display: !showLogin && route === '/' ? 'block' : 'none', height: '100%' }}>
+        {visitedRoutes.has('/') && <CoinListPage
+          active={route === '/' && pageActive}
+          selectedSymbol={selectedSymbol}
+          onSelectSymbol={setSelectedSymbol}
+          onOpenChart={() => navigate('/chart')}
+          onOpenTrade={openTrade}
+          onProductTypeChange={setSelectedProductType}
+          onExchangeChange={setSelectedExchange}
+          onTickDecimalsChange={setSelectedTickDecimals}
+          onLogout={handleLogout}
+          user={user}
+          onAccount={() => setMyPageOpen(true)}
+          onLogin={() => setLoginRequested(true)}
+        />}
       </div>
-      <div style={{ display: route === '/chart' ? 'block' : 'none', height: '100%' }}>
-        {visitedRoutes.has('/chart') && <CoinChartPage routeActive={route === '/chart'} active={route === '/chart' && visible} symbol={selectedSymbol} onSelectSymbol={setSelectedSymbol} productType={selectedProductType} exchange={selectedExchange} tickDecimals={selectedTickDecimals} onExchangeChange={setSelectedExchange} onProductTypeChange={setSelectedProductType} focusTracker={null} />}
+      <div style={{ display: !showLogin && route === '/chart' ? 'block' : 'none', height: '100%' }}>
+        {visitedRoutes.has('/chart') && <CoinChartPage
+          routeActive={route === '/chart' && !showLogin}
+          active={route === '/chart' && pageActive}
+          canUseIndicators={!!user}
+          onLogin={() => setLoginRequested(true)}
+          symbol={selectedSymbol}
+          onSelectSymbol={setSelectedSymbol}
+          productType={selectedProductType}
+          exchange={selectedExchange}
+          tickDecimals={selectedTickDecimals}
+          onExchangeChange={setSelectedExchange}
+          onProductTypeChange={setSelectedProductType}
+          focusTracker={null}
+        />}
       </div>
-      <div style={{ display: route === '/orders' ? 'block' : 'none', height: '100%' }}>
-        {visitedRoutes.has('/orders') && <OrderPage symbol={selectedSymbol} active={route === '/orders' && visible} onSelectSymbol={setSelectedSymbol} onProductTypeChange={setSelectedProductType} onExchangeChange={setSelectedExchange} onOpenChart={() => navigate('/chart')} tradeMarketReq={tradeMarketReq} onTabBar={setTabBar} />}
+      <div style={{ display: user && route === '/orders' ? 'block' : 'none', height: '100%' }}>
+        {user && visitedRoutes.has('/orders') && <MobileTradePage
+          user={user}
+          symbol={selectedSymbol}
+          active={route === '/orders' && pageActive}
+          onSelectSymbol={setSelectedSymbol}
+          onProductTypeChange={setSelectedProductType}
+          onExchangeChange={setSelectedExchange}
+          onOpenChart={() => navigate('/chart')}
+          tradeMarketReq={tradeMarketReq}
+          onTabBar={setTabBar}
+        />}
       </div>
-      <div style={{ display: route === '/strategy' ? 'block' : 'none', height: '100%' }}>
-        {visitedRoutes.has('/strategy') && <StrategyComingSoon />}
+      <div style={{ display: user && route === '/strategy' ? 'block' : 'none', height: '100%' }}>
+        {user && visitedRoutes.has('/strategy') && <StrategyComingSoon />}
       </div>
-      <div style={{ display: route === '/assets' ? 'block' : 'none', height: '100%' }}>
-        {visitedRoutes.has('/assets') && <AssetsPage active={route === '/assets' && visible} onTabBar={setTabBar} />}
+      <div style={{ display: user && route === '/assets' ? 'block' : 'none', height: '100%' }}>
+        {user && visitedRoutes.has('/assets') && <AssetsPage active={route === '/assets' && pageActive} onTabBar={setTabBar} />}
       </div>
 
       {/* 거래/자산 공유 탭 인디케이터 — 페이지가 바뀌어도 같은 바가 새 활성탭 자리로 슬라이드 */}
@@ -249,6 +269,8 @@ export default function App() {
           <button type="button" onClick={() => setTradeError(null)} aria-label="안내 닫기">×</button>
         </div>
       )}
+
+      {myPageOpen && user && <MyPageDialog user={user} onClose={() => setMyPageOpen(false)} onUserChange={setUser} />}
 
       <BottomTabBar activeRoute={route} onNavigate={navigate} />
     </div>

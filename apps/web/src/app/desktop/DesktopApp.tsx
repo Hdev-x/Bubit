@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AuthUser } from '../../api/server/authApi';
 import { useCoinLogos } from './panels/marketShared';
 import { WatchlistPanel } from './panels/WatchlistPanel';
@@ -38,15 +38,26 @@ import { SymbolHeader } from './panels/SymbolHeader';
 import { ChartToolbar } from './panels/ChartToolbar';
 import { ChartStage } from './panels/ChartStage';
 import { OrderbookPanel } from './panels/OrderbookPanel';
-import { RightPanel } from './panels/RightPanel';
+import { WorkspaceControls } from './panels/WorkspaceControls';
+import { OrderbookCompanion } from './panels/OrderbookCompanion';
 import './DesktopApp.css';
+
+const MyPageDialog = lazy(() => import('../shared/account/MyPageDialog'));
+const CommunityPanel = lazy(() => import('../shared/community/CommunityPanel').then(module => ({ default: module.CommunityPanel })));
+const PaperTradingDialog = lazy(() => import('./panels/PaperTradingDialog').then(module => ({ default: module.PaperTradingDialog })));
 
 // ── 데스크톱 웹 — 모바일 훅/컴포넌트를 그대로 재사용해 같은 데이터를 다룸(화면만 다름) ──
 // 실데이터: 내 투자(선물=useMainTrade, 현물=useSpotTrade) · 호가(useOrderbook) · 차트(useCoinCandles)
 //           · 마켓 리스트(useMarketTickers, BITGET 현물).
-// 목업: 커뮤니티 채팅 / 헤더 검색(요청상 보류).
+// 헤더 검색은 아직 미연결이며 종목 검색은 마켓 사이드바에서 제공한다.
 
-export default function DesktopApp({ user, onLoginClick, onLogout }: { user: AuthUser | null; onLoginClick: () => void; onLogout: () => void }) {
+export default function DesktopApp({ user, onLoginClick, onLogout, onUserChange }: {
+  user: AuthUser | null; onLoginClick: () => void; onLogout: () => void; onUserChange: (user: AuthUser) => void;
+}) {
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [paperOpen, setPaperOpen] = useState(false);
+  const [showOrderbook, setShowOrderbook] = usePersistentState('web_show_orderbook', true);
+  const [showCommunity, setShowCommunity] = usePersistentState('web_show_community', true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const mountOpenRaf = useRef(0);
   // 새로고침 시 닫힌 상태로 1프레임 그린 뒤 열어 width 트랜지션(열림 모션)을 재생
@@ -69,10 +80,10 @@ export default function DesktopApp({ user, onLoginClick, onLogout }: { user: Aut
   const [positionsOn, setPositionsOn] = useState(true);
   const [selPosIdx, setSelPosIdx] = useState(0);
   // ── 차트 상태 훅 : 드로잉 · 지표 · 보기. 툴바·무대 컴포넌트가 이 묶음을 그대로 받는다 ──
-  const isAdmin = user?.role === 'ADMIN';
+  const canUseIndicators = !!user;
   const draw = useDrawingState();
   const { drawOpen, setDrawOpen, drawRef } = draw; // 드롭다운 바깥 클릭 effect용
-  const indi = useIndicatorState({ indiOff: !isAdmin });
+  const indi = useIndicatorState({ indiOff: !canUseIndicators });
   const { indiOpen, setIndiOpen, indiRef, effIndicatorSettings } = indi; // effIndicatorSettings는 useMtfCandles 입력
   const view = useChartViewState({ loggedIn: !!user });
   const { activeTf, setActiveTf, chartSetOpen, setChartSetOpen, chartSetRef } = view;
@@ -110,7 +121,7 @@ export default function DesktopApp({ user, onLoginClick, onLogout }: { user: Aut
   }, [indiOpen, chartSetOpen, drawOpen, indiRef, chartSetRef, drawRef, setIndiOpen, setChartSetOpen, setDrawOpen]);
 
   // ── 실데이터 — 총자산/포지션 (모바일과 동일 세션) ──
-  const { data: trade } = useMainTrade(section === 'invest' && sidebarOpen);
+  const { data: trade } = useMainTrade(!!user && section === 'invest' && sidebarOpen);
   const usdKrw = useUsdKrw();
   const { hasKey, positions, available, equity } = trade;
   // 모바일과 동일: 데이터(equity>0) 도착 전까지 스켈레톤, 빈 계정은 1500ms 폴백
@@ -188,6 +199,7 @@ export default function DesktopApp({ user, onLoginClick, onLogout }: { user: Aut
   const [depthOpen, setDepthOpen] = useState(false); // 자릿수(묶음) 선택 드롭다운
   const ob = useOrderbookSnapshot({
     symbol: CHART_SYMBOL, exchange: chartSel.exchange, isFutures: chartIsFutures, isKrw: chartIsKrw, livePrice, priceReady,
+    active: showOrderbook,
   });
   const { krwDec, getTickDecimals } = ob; // 차트 소수점 스테이징·fmtPx가 씀
   // solo 포커스: 그 패턴 TF에서 "한 단계 아래"까지만 TF 선택 허용 (drill-down 노이즈 방지)
@@ -309,6 +321,8 @@ export default function DesktopApp({ user, onLoginClick, onLogout }: { user: Aut
     if (selectionChanged && hoveredCandle) setHoveredCandle(null);
   }
   const shown = displayPacket ?? nextPacket;
+  const displayedHeader = shown?.sel.symbol === CHART_SYMBOL && shown.sel.exchange === chartSel.exchange
+    && shown.sel.isFutures === chartIsFutures && priceReady ? H : shown?.header;
   const chartError = candleLoad.status === 'error' || priceStatus === 'error';
   const chartPending = !packetReady && !chartError;
   const retryChart = () => {
@@ -317,12 +331,12 @@ export default function DesktopApp({ user, onLoginClick, onLogout }: { user: Aut
     setPriceReloadKey((key) => key + 1);
   };
   useEffect(() => {
-    if (!shown?.header) return;
-    const change = shown.header.chg
-      ? ` (${shown.header.chg.up ? '+' : ''}${shown.header.chg.pct}%)`
+    if (!displayedHeader) return;
+    const change = displayedHeader.chg
+      ? ` (${displayedHeader.chg.up ? '+' : ''}${displayedHeader.chg.pct}%)`
       : '';
-    document.title = `${shown.header.title} ${shown.header.px}${change}`;
-  }, [shown?.header]);
+    document.title = `${displayedHeader.title} ${displayedHeader.px}${change}`;
+  }, [displayedHeader]);
   useEffect(() => {
     if (!shown?.soloOn || !shown.focusTracker || !shown.candles.length) {
       focusScrollKeyRef.current = '';
@@ -354,7 +368,7 @@ export default function DesktopApp({ user, onLoginClick, onLogout }: { user: Aut
   const marketActive = section === 'market' && sidebarOpen;
 
   // ── 실데이터 — 현물 보유자산 (투자탭 '현물' 선택 시) ──
-  const spotActive = section === 'invest' && investTab === '현물' && sidebarOpen;
+  const spotActive = !!user && section === 'invest' && investTab === '현물' && sidebarOpen;
   const { data: spot } = useSpotTrade(spotActive);
   const spotPriceSymbols = spot.holdings
     .filter((h) => h.coin !== 'USDT' && h.coin !== 'USDC')
@@ -421,9 +435,17 @@ export default function DesktopApp({ user, onLoginClick, onLogout }: { user: Aut
         <div className="app-main">
           <DesktopHeader
             user={user} onLoginClick={onLoginClick} onLogout={onLogout}
+            onProfileClick={() => { setMenuOpen(false); setProfileOpen(true); }}
             menuOpen={menuOpen} setMenuOpen={setMenuOpen} menuRef={menuRef}
             effWatchMode={effWatchMode} setWatchMode={setWatchMode}
-          />
+          >
+            <WorkspaceControls
+              showOrderbook={showOrderbook} showCommunity={showCommunity}
+              onToggleOrderbook={() => setShowOrderbook(value => !value)}
+              onToggleCommunity={() => setShowCommunity(value => !value)}
+              onOpenPaper={() => user ? setPaperOpen(true) : onLoginClick()}
+            />
+          </DesktopHeader>
 
           {/* 탑바(헤더)는 고정 — 그 아래 본문(sub-header+차트)만 dock 컬럼과 가로로 묶어 오른쪽으로 민다 */}
           <div className="app-body-row">
@@ -440,16 +462,16 @@ export default function DesktopApp({ user, onLoginClick, onLogout }: { user: Aut
           <div className="app-body-col">
 
           {/* 차트 헤더 — 거래탭 종목 헤더 디자인 이식 */}
-          <SymbolHeader H={shown?.header ?? null} symbol={sel.symbol} chartSel={sel} base={sel.symbol.replace(/USDT$|USDC$|KRW$/, '')} isFutures={sel.isFutures} coinLogos={coinLogos} />
+          <SymbolHeader H={displayedHeader ?? null} symbol={sel.symbol} chartSel={sel} base={sel.symbol.replace(/USDT$|USDC$|KRW$/, '')} isFutures={sel.isFutures} coinLogos={coinLogos} />
 
           <div className="body">
-            <main className="main-layout">
+            <main className={`main-layout${showOrderbook || showCommunity ? '' : ' chart-only'}`}>
 
               {/* 차트 패널 — 실데이터(비트겟 BTCUSDT 선물) */}
               <section className="panel panel-chart">
                 <ChartToolbar
                   draw={draw} indi={indi} view={view} rsi={rsi} rank={rank} solo={solo}
-                  user={user} onLoginClick={onLoginClick} isAdmin={isAdmin} visibleTFs={shown?.visibleTFs ?? visibleTFs}
+                  user={user} onLoginClick={onLoginClick} canUseIndicators={canUseIndicators} visibleTFs={shown?.visibleTFs ?? visibleTFs}
                   displayedActiveTf={shown?.activeTf ?? activeTf}
                   chartRef={chartRef} handleCaptureChart={handleCaptureChart} interactionBlocked={!packetReady}
                 />
@@ -460,11 +482,17 @@ export default function DesktopApp({ user, onLoginClick, onLogout }: { user: Aut
               </section>
 
               {/* 가운데: 호가 + Market/Community */}
-              <section className="panel-middle">
-                <OrderbookPanel ob={ob} depthOpen={depthOpen} setDepthOpen={setDepthOpen} exchange={chartSel.exchange} />
-
-                <RightPanel user={user} />
-              </section>
+              {(showOrderbook || showCommunity) && <section className="panel-middle">
+                {showOrderbook && <OrderbookPanel ob={ob} depthOpen={depthOpen} setDepthOpen={setDepthOpen} exchange={chartSel.exchange} />}
+                {showCommunity ? (
+                  <Suspense fallback={<p role="status">커뮤니티 불러오는 중…</p>}>
+                    <CommunityPanel user={user} onLogin={onLoginClick} exchange={sel.exchange.toLowerCase()} market={sel.isFutures ? 'futures' : 'spot'} symbol={sel.symbol} />
+                  </Suspense>
+                ) : (
+                  <OrderbookCompanion exchange={chartSel.exchange} symbol={CHART_SYMBOL} isFutures={chartIsFutures} price={livePrice} funding={ob.funding}
+                    changeRate={livePrice != null && dailyOpenPrice ? (livePrice - dailyOpenPrice) / dailyOpenPrice : null} />
+                )}
+              </section>}
 
             </main>
           </div>
@@ -494,6 +522,11 @@ export default function DesktopApp({ user, onLoginClick, onLogout }: { user: Aut
         <span>© 2026 Bubit · Desktop</span>
         <span>v0.1</span>
       </footer>
+
+      <Suspense fallback={<div className="workspace-dialog-loading" role="status">불러오는 중…</div>}>
+        {user && profileOpen && <MyPageDialog user={user} onUserChange={onUserChange} onClose={() => setProfileOpen(false)} />}
+        {user && paperOpen && <PaperTradingDialog user={user} symbol={CHART_SYMBOL} exchange={chartSel.exchange} isFutures={chartIsFutures} price={livePrice} onClose={() => setPaperOpen(false)} />}
+      </Suspense>
 
       {/* 관심 미니 시세창 — float 모드: 화면 위에 떠있는 드래그 창 */}
       {effWatchMode === 'float' && (

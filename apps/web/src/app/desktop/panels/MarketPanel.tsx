@@ -1,6 +1,6 @@
 // 데스크톱 웹 마켓 패널 — 모바일 거래탭 종목 시트(TradeSymbolSheet) 복붙·각색 + 로고 컬럼.
 // Favorites는 사이드바 '관심' 섹션(FavoritesPanel)으로 분리 — 여기선 Spot/Futures만.
-// 데이터/유틸은 공유 계층만 사용. 행/정렬/즐겨찾기/로더는 marketShared.
+// 시장별 조회는 공용 hook, 행·정렬·즐겨찾기는 패널 공용 모듈을 사용한다.
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import {
   subscribeBitgetSpotTickers, subscribeBitgetFuturesTickers,
@@ -9,59 +9,43 @@ import {
 } from '../../../api/server/coinRealtime';
 import { subscribeKrwTickers } from '../../../api/exchange/krw/krwRealtime';
 import { usePricePrecision } from '../../../hooks/market/usePricePrecision';
-import { useDelayedReady } from '../../../hooks/ui/useDelayedReady';
+import { useMarketTickerLists } from '../../../hooks/market/useMarketTickerLists';
+import { refreshTickerList, type TickerListKey } from '../../../api/server/marketTickerLists';
 import type { CoinTicker } from '../../../shared/types/market';
 import { EXCHANGE_OPTIONS, isFuturesSupported, type ExchangeId } from '../../../shared/constants/exchanges';
-import { loadExchangeTickers, useDesktopFavorites, useCoinLogos, type Market } from './marketShared';
+import { useDesktopFavorites, useCoinLogos, type Market } from './marketShared';
 import { SortIcon, SymbolRow } from './MarketRow';
 import './panels.css';
 
 type Filter = 'spot' | 'futures';
 type SortKey = 'name' | 'volume' | 'price' | 'change';
 type Entry = { t: CoinTicker; market: Market };
+const ROW_HEIGHT = 54;
 
 export function MarketPanel({ active, onSelect }: { active: boolean; onSelect?: (symbol: string, market: Market, exchange: ExchangeId) => void }) {
   const [exchange, setExchange] = useState<ExchangeId>('BINANCE');
   const [filter, setFilter] = useState<Filter>('futures');
-  const [spotTickers, setSpotTickers] = useState<CoinTicker[]>([]);
-  const [futuresTickers, setFuturesTickers] = useState<CoinTicker[]>([]);
+  const marketKey: TickerListKey = `${exchange}|${filter}`;
+  const tickerLists = useMarketTickerLists([marketKey], active);
+  const currentList = tickerLists[marketKey];
   const [searchTerm, setSearchTerm] = useState('');
   const [visibleCount, setVisibleCount] = useState(40);
+  const [viewport, setViewport] = useState({ start: 0, count: 40 });
   const [sortKey, setSortKey] = useState<SortKey>('volume');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [liveSnapshot, setLiveSnapshot] = useState<{ exchange: ExchangeId; values: Record<string, RealtimeTicker> }>({ exchange, values: {} });
-  const [previousQuery, setPreviousQuery] = useState({ active, exchange });
+  const liveKey = `${marketKey}|${active}`;
+  const [previousLiveKey, setPreviousLiveKey] = useState(liveKey);
   const listRef = useRef<HTMLDivElement>(null);
   const { isFav, toggleFav } = useDesktopFavorites();
   const logos = useCoinLogos();
   const { precisionMap } = usePricePrecision();
   const getDecimals = useCallback((t: CoinTicker) => precisionMap.get(t.symbol) ?? t.tickDecimals, [precisionMap]);
 
-  if (previousQuery.active !== active || previousQuery.exchange !== exchange) {
-    const exchangeChanged = previousQuery.exchange !== exchange;
-    setPreviousQuery({ active, exchange });
-    if (exchangeChanged) setLiveSnapshot({ exchange, values: {} });
-    if (active) {
-      setSpotTickers([]);
-      setFuturesTickers([]);
-    }
+  if (previousLiveKey !== liveKey) {
+    setPreviousLiveKey(liveKey);
+    setLiveSnapshot({ exchange, values: {} });
   }
-
-  // 거래소별 현물·선물 종목 로드 — 5초 폴링
-  useEffect(() => {
-    if (!active) return;
-    let ignore = false;
-    const load = () => {
-      loadExchangeTickers(exchange).then(({ spot, futures }) => {
-        if (ignore) return;
-        setSpotTickers(spot);
-        setFuturesTickers(futures);
-      }).catch(() => { /* 폴링 실패(429 등) 시 이전 목록 유지 — 빈 화면으로 안 덮음 */ });
-    };
-    load();
-    const id = setInterval(load, 5000);
-    return () => { ignore = true; clearInterval(id); };
-  }, [active, exchange]);
 
   const currentLiveMap = liveSnapshot.exchange === exchange ? liveSnapshot.values : {};
   // 전환·정렬·검색 변경 시 리스트 스크롤을 맨 위로 (이전 위치 유지로 인한 어색함 제거)
@@ -69,14 +53,15 @@ export function MarketPanel({ active, onSelect }: { active: boolean; onSelect?: 
 
   function toggleSort(key: SortKey) {
     setVisibleCount(40);
+    setViewport({ start: 0, count: 40 });
     if (sortKey === key) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
     else { setSortKey(key); setSortDir(key === 'name' ? 'asc' : 'desc'); }
   }
 
   const entries: Entry[] = useMemo(() => {
-    const src = filter === 'spot' ? spotTickers : futuresTickers;
+    const src = currentList?.tickers ?? [];
     return src.map(t => ({ t, market: filter as Market }));
-  }, [filter, spotTickers, futuresTickers]);
+  }, [filter, currentList]);
 
   const sorted = useMemo(() => {
     const list = [...entries];
@@ -98,14 +83,14 @@ export function MarketPanel({ active, onSelect }: { active: boolean; onSelect?: 
     return sorted.filter(e => e.t.symbol.includes(term) || (e.t.name && e.t.name.toUpperCase().includes(term)));
   }, [sorted, searchTerm]);
 
-  const visible = filtered.slice(0, visibleCount);
-
-  // 현재 필터(현물/선물) 종목 데이터 도착 전까지 스켈레톤 (빈 응답 대비 1500ms 폴백)
-  const listReady = useDelayedReady((filter === 'spot' ? spotTickers : futuresTickers).length > 0);
+  const loadedCount = Math.min(visibleCount, filtered.length);
+  const startIndex = Math.min(viewport.start, Math.max(0, loadedCount - viewport.count));
+  const visible = filtered.slice(startIndex, Math.min(loadedCount, startIndex + viewport.count));
+  const loading = !entries.length && (!currentList || currentList.status === 'loading');
 
   // 보이는 종목만 WS 구독(실시간). 비트겟·바이낸스=백엔드 STOMP, 업비트·빗썸=직결 WS(현물만). 거래량 컬럼은 5초 REST 유지.
-  const visibleSpotKey = visible.filter(e => e.market === 'spot').map(e => e.t.symbol).join(',');
-  const visibleFuturesKey = visible.filter(e => e.market === 'futures').map(e => e.t.symbol).join(',');
+  const visibleSpotKey = visible.filter(e => e.market === 'spot').map(e => e.t.symbol).sort().join(',');
+  const visibleFuturesKey = visible.filter(e => e.market === 'futures').map(e => e.t.symbol).sort().join(',');
   useEffect(() => {
     if (!active || !visibleSpotKey) return;
     let current = true;
@@ -132,6 +117,10 @@ export function MarketPanel({ active, onSelect }: { active: boolean; onSelect?: 
 
   function handleScroll(e: React.UIEvent<HTMLDivElement>) {
     const el = e.currentTarget;
+    // 매 행마다 소켓을 다시 열지 않도록 20행 단위로 창을 옮긴다.
+    const start = Math.floor(Math.max(0, Math.floor(el.scrollTop / ROW_HEIGHT) - 8) / 20) * 20;
+    const count = Math.max(40, Math.ceil(el.clientHeight / ROW_HEIGHT) + 28);
+    setViewport(previous => previous.start === start && previous.count === count ? previous : { start, count });
     if (el.scrollHeight - el.scrollTop - el.clientHeight < 300 && visibleCount < filtered.length) {
       setVisibleCount(prev => prev + 40);
     }
@@ -146,6 +135,7 @@ export function MarketPanel({ active, onSelect }: { active: boolean; onSelect?: 
             if (e.target.value === searchTerm) return;
             setSearchTerm(e.target.value);
             setVisibleCount(40);
+            setViewport({ start: 0, count: 40 });
           }} />
         </div>
       </div>
@@ -157,6 +147,7 @@ export function MarketPanel({ active, onSelect }: { active: boolean; onSelect?: 
             setExchange(ex.id);
             if (!isFuturesSupported(ex.id)) setFilter('spot');
             setVisibleCount(40);
+            setViewport({ start: 0, count: 40 });
           }}>
             <img src={ex.logo} alt="" aria-hidden="true" />{ex.label}
           </button>
@@ -168,12 +159,14 @@ export function MarketPanel({ active, onSelect }: { active: boolean; onSelect?: 
           if (filter === 'spot') return;
           setFilter('spot');
           setVisibleCount(40);
+          setViewport({ start: 0, count: 40 });
         }}>Spot</button>
         {isFuturesSupported(exchange) && (
           <button className={filter === 'futures' ? 'active' : ''} onClick={() => {
             if (filter === 'futures') return;
             setFilter('futures');
             setVisibleCount(40);
+            setViewport({ start: 0, count: 40 });
           }}>Futures</button>
         )}
       </div>
@@ -191,8 +184,8 @@ export function MarketPanel({ active, onSelect }: { active: boolean; onSelect?: 
         </div>
       </div>
 
-      <div className="wm-list" ref={listRef} onScroll={handleScroll}>
-        {!listReady ? (
+      <div className="wm-list wm-market-list" ref={listRef} onScroll={handleScroll} aria-busy={loading}>
+        {loading ? (
           Array.from({ length: 12 }).map((_, i) => (
             <div key={i} className="wm-row wm-row-skel">
               <span className="wm-row-logo skeleton-shimmer" />
@@ -206,8 +199,13 @@ export function MarketPanel({ active, onSelect }: { active: boolean; onSelect?: 
               </div>
             </div>
           ))
-        ) : (
-          <div className="wm-list-fade">
+        ) : !entries.length ? (
+          <p className="wm-empty" role="status">
+            {currentList?.status === 'error' ? '종목 목록을 불러오지 못했어요.' : '표시할 종목이 없어요.'}
+            <button type="button" className="wm-retry" onClick={() => { void refreshTickerList(marketKey, true); }}>다시 불러오기</button>
+          </p>
+        ) : !filtered.length ? <p className="wm-empty">검색 결과가 없어요.</p> : (
+          <div className="wm-list-fade" key={marketKey} style={{ paddingTop: startIndex * ROW_HEIGHT, paddingBottom: (loadedCount - startIndex - visible.length) * ROW_HEIGHT }}>
             {visible.map(({ t, market }) => {
               const live = currentLiveMap[`${market}|${t.symbol}`];
               // 거래대금은 REST(24h, 5초 폴링) 값 유지. WS volume은 kline UTC누적치라 24h와 충돌 → 가격·등락만 실시간 갱신.

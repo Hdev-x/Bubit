@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { act, useEffect, useState } from 'react';
-import type { RefObject } from 'react';
+import type { ReactNode, RefObject } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AuthUser } from '../../api/server/authApi';
 import type { TrackerState } from '../../shared/types/bot';
@@ -35,18 +35,19 @@ vi.mock('../../chart/hooks/useMtfCandles', () => ({ useMtfCandles: (_symbol: str
 vi.mock('./hooks/useDrawingState', () => ({ useDrawingState: () => ({ drawOpen: false, setDrawOpen: vi.fn(), drawRef: { current: null } }) }));
 vi.mock('./hooks/useIndicatorState', () => ({ useIndicatorState: () => ({ indiOpen: false, setIndiOpen: vi.fn(), indiRef: { current: null }, effIndicatorSettings: { '1M': {}, '1W': {}, '3D': {}, '1D': {} } }) }));
 vi.mock('./hooks/useChartViewState', () => ({ useChartViewState: () => { const [activeTf, setActiveTf] = useState('1H'); return { activeTf, setActiveTf, chartSetOpen: false, setChartSetOpen: vi.fn(), chartSetRef: { current: null } }; } }));
-vi.mock('./panels/DesktopHeader', () => ({ DesktopHeader: ({ setWatchMode }: { setWatchMode: (mode: 'hidden' | 'dock') => void }) => <><button onClick={() => setWatchMode('dock')}>dock</button><button onClick={() => setWatchMode('hidden')}>hide</button></> }));
+vi.mock('./panels/DesktopHeader', () => ({ DesktopHeader: ({ setWatchMode, children }: { setWatchMode: (mode: 'hidden' | 'dock') => void; children: ReactNode }) => <>{children}<button onClick={() => setWatchMode('dock')}>dock</button><button onClick={() => setWatchMode('hidden')}>hide</button></> }));
 vi.mock('./panels/WatchlistPanel', () => ({ WatchlistPanel: ({ mode, onSelect }: { mode: string; onSelect: (symbol: string, market: string, exchange: string) => void }) => <div data-testid={`watch-${mode}`}><button onClick={() => onSelect('BTCUSDT', 'spot', 'BITGET')}>same-symbol</button><button onClick={() => onSelect('ETHUSDT', 'spot', 'BITGET')}>other-symbol</button></div> }));
 vi.mock('./panels/ChartToolbar', () => ({ ChartToolbar: ({ solo, view, interactionBlocked }: { solo: { soloOn: boolean; setFocusTracker: (tracker: TrackerState) => void; setSoloActive: (active: boolean) => void }; view: { setActiveTf: (tf: string) => void }; interactionBlocked?: boolean }) => <><output data-testid="solo">{String(solo.soloOn)}</output><output data-testid="toolbar-blocked">{String(interactionBlocked)}</output><button onClick={() => { solo.setFocusTracker({ symbol: 'BTCUSDT', xabc: { X: { time: 1 } } } as TrackerState); solo.setSoloActive(true); }}>solo-on</button><button onClick={() => view.setActiveTf('4H')}>change-tf</button></> }));
 vi.mock('./panels/ChartStage', () => ({ ChartStage: ({ chartRef, data, sel }: { chartRef: RefObject<MarketChartRef | null>; data: { chartTickDecimals: number; candles: Array<{ close: number }>; pending: boolean; error: boolean; missing: string[]; onRetry: () => void; handleVisibleRangeChange: () => void }; sel: { symbol: string } }) => { useEffect(() => { controls.chartMounts += 1; (chartRef as { current: MarketChartRef | null }).current = { resetPriceAutoScale: controls.resetPriceAutoScale, focusTimeWindow: controls.focusTimeWindow, getVisibleRawTimeRange: () => ({ from: 1, to: 2 }) } as unknown as MarketChartRef; return () => { (chartRef as { current: MarketChartRef | null }).current = null; }; }, [chartRef]); return <><output data-testid="decimals">{data.chartTickDecimals}</output><output data-testid="shown">{`${sel.symbol}|${data.candles[0]?.close}|${data.pending}|${data.error}|${data.missing.join(',')}`}</output><button onClick={data.onRetry}>retry-chart</button><button onClick={data.handleVisibleRangeChange}>load-history</button></>; } }));
 vi.mock('./panels/SymbolHeader', () => ({ SymbolHeader: () => null }));
-vi.mock('./panels/OrderbookPanel', () => ({ OrderbookPanel: () => null }));
-vi.mock('./panels/RightPanel', () => ({ RightPanel: () => null }));
+vi.mock('./panels/OrderbookPanel', () => ({ OrderbookPanel: () => <div data-testid="orderbook" /> }));
+vi.mock('../shared/community/CommunityPanel', () => ({ CommunityPanel: () => <div data-testid="community" /> }));
+vi.mock('./panels/OrderbookCompanion', () => ({ OrderbookCompanion: () => <div data-testid="companion" /> }));
 vi.mock('./panels/Sidebar', () => ({ Sidebar: () => null }));
 vi.mock('./panels/IconRail', () => ({ IconRail: () => null }));
 
-const user = { role: 'USER' } as AuthUser;
-const props = { user, onLoginClick: vi.fn(), onLogout: vi.fn() };
+const user: AuthUser = { username: 'tester', role: 'USER' };
+const props = { user, onLoginClick: vi.fn(), onLogout: vi.fn(), onUserChange: vi.fn() };
 const click = async (container: HTMLElement, label: string) => {
   const button = [...container.querySelectorAll('button')].find((node) => node.textContent === label) as HTMLButtonElement;
   await act(async () => button.click());
@@ -62,6 +63,29 @@ describe('DesktopApp chart state', () => {
     vi.stubGlobal('cancelAnimationFrame', (id: number) => controls.raf.delete(id));
   });
   afterEach(async () => { await cleanupRenderComponents(); vi.clearAllTimers(); vi.useRealTimers(); vi.unstubAllGlobals(); });
+
+  it('호가·커뮤니티 토글 조합에 따라 보조 패널과 차트 폭을 바꾸며 차트는 유지한다', async () => {
+    const view = await renderComponent(<DesktopApp {...props} />);
+    expect(view.container.querySelector('[data-testid="orderbook"]')).not.toBeNull();
+    await click(view.container, '커뮤니티');
+    expect(view.container.querySelector('[data-testid="companion"]')).not.toBeNull();
+    expect(view.container.querySelector('[data-testid="community"]')).toBeNull();
+    await click(view.container, '호가');
+    expect(view.container.querySelector('.main-layout.chart-only')).not.toBeNull();
+    expect(view.container.querySelector('.panel-middle')).toBeNull();
+    await click(view.container, '커뮤니티');
+    expect(view.container.querySelector('[data-testid="community"]')).not.toBeNull();
+    expect(view.container.querySelector('[data-testid="orderbook"]')).toBeNull();
+    expect(controls.chartMounts).toBe(1);
+  });
+
+  it('비로그인 모의투자 진입은 주문 화면 대신 로그인을 요청한다', async () => {
+    props.onLoginClick.mockClear();
+    const view = await renderComponent(<DesktopApp {...props} user={null} />);
+    await click(view.container, '모의투자');
+    expect(props.onLoginClick).toHaveBeenCalledOnce();
+    expect(view.container.querySelector('.paper-trading-dialog')).toBeNull();
+  });
 
   it('같은 symbol 선택은 solo를 유지하고 다른 symbol 선택만 해제한다', async () => {
     const view = await renderComponent(<DesktopApp {...props} />);

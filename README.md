@@ -20,7 +20,7 @@
   <a href="https://github.com/Hdev-x/Bubit/actions/workflows/ci.yml"><img src="https://github.com/Hdev-x/Bubit/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
 </p>
 
-> **Beta 소스 공개 중** · 현재는 로컬에서 실행할 수 있으며, 외부 접속용 서비스 주소는 준비 중입니다.
+> **Beta** · [Bubit 열기](https://bubit.ddnsfree.com) · 아래 가이드로 로컬에서도 실행할 수 있습니다.
 
 ## 화면 미리보기
 
@@ -30,7 +30,7 @@
   <img src="docs/images/desktop-chart.png" alt="Bubit PC의 Bitget BTC 차트 화면" width="960" />
 </p>
 
-PC의 Community 메시지와 인원수는 UI 샘플이며, 실제 채팅은 아직 지원하지 않습니다.
+이전 버전 미리보기의 Community는 샘플 UI입니다. 현재 버전은 종목 이야기·자유게시판과 댓글·좋아요·사진 첨부를 지원합니다.
 
 <table>
   <tr>
@@ -52,7 +52,9 @@ PC의 Community 메시지와 인원수는 UI 샘플이며, 실제 채팅은 아�
 | 실시간 마켓 | 거래소별 시세와 호가를 확인하고, 종목을 검색하거나 관심종목으로 관리합니다. |
 | 차트 분석 | 시간봉을 전환하고 지표, SMC·하모닉·파동 분석과 드로잉 도구로 차트를 살펴봅니다. |
 | PC·Mobile 화면 | PC에서는 차트·시세·호가 패널을 함께 보고, Mobile에서는 전용 탭과 시트로 마켓·차트·자산을 확인합니다. |
-| 계좌 조회 | 선택적으로 Bitget 계좌를 연결해 자산·포지션·미체결 주문을 조회합니다. |
+| 계좌 조회 | 마이페이지에서 Bitget API를 연결해 자산·포지션·미체결 주문을 조회합니다. |
+| 마이페이지·커뮤니티 | 닉네임·프로필 사진을 설정하고 종목 이야기·자유게시판을 이용합니다. |
+| 모의투자 | 가상 잔고로 Bitget USDT 선물 시장가·지정가 주문을 연습합니다. |
 
 분석 도구의 기기별 이용 조건은 아래 [지원 범위](#지원-범위와-안내)를 확인하세요.
 
@@ -68,7 +70,7 @@ cd Bubit
 로컬 실행을 마치면 다음 주소에서 사용할 수 있습니다.
 
 - **PC:** [localhost:5174/web/](http://localhost:5174/web/) — 로그인 전에도 실시간 마켓을 살펴볼 수 있습니다.
-- **Mobile:** [localhost:5173/mobile/](http://localhost:5173/mobile/) — PC 화면에서 가입한 계정으로 로그인해 사용합니다. PC 브라우저에서도 Mobile 화면을 열 수 있습니다.
+- **Mobile:** [localhost:5173/mobile/](http://localhost:5173/mobile/) — 시장·차트는 로그인 없이 이용합니다. 거래·전략·자산은 로그인이 필요합니다.
 
 마켓·차트 사용 순서와 계좌 연결 방법은 [사용 가이드](docs/USER-GUIDE.md)를 참고하세요.
 
@@ -77,7 +79,7 @@ cd Bubit
 | 항목 | 현재 Beta 지원 범위 |
 | --- | --- |
 | 시세·차트 | Binance · Bitget · Upbit · Bithumb. 거래소별 상품·종목 범위는 다릅니다. |
-| 지표·분석 도구 | Mobile에서 사용 가능하며, PC 지표 기능은 관리자 계정으로 제한됩니다. |
+| 지표·분석 도구 | PC·Mobile에서 로그인 후 하모닉 등 고급 분석 기능을 사용할 수 있습니다. |
 | 계좌 연결 | Bitget 조회 전용입니다. 실제 주문·자동매매 기능은 제공하지 않습니다. |
 
 거래소 응답과 네트워크 상태에 따라 시세 갱신이 지연될 수 있습니다. 미연결 메뉴와 데이터 삭제 등 현재 제한은 [사용 전 알아둘 점](docs/USER-GUIDE.md#알아둘-점)에 정리했습니다.

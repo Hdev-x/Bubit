@@ -69,6 +69,8 @@
 
 .header-search input::placeholder { color: var(--text3); }
 
+@media (max-width: 1120px) { .header-search { display: none; } }
+
 .header-right { margin-left: auto; display: flex; align-items: center; gap: 14px; }
 
 /* 아바타 버튼 — tpm nav-user-btn(둥근 사각 + 테두리 + 인물 아이콘) */
@@ -430,6 +432,9 @@
   flex: 1;
   min-width: 0;
 }
+
+.main-layout.chart-only { grid-template-columns: minmax(0, 1fr); }
+.workspace-dialog-loading { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; background: #0008; color: var(--text); }
 
 .panel {
   background: transparent;
@@ -843,140 +848,7 @@
 
 .ob-depth-dd-item.active { color: #fff; font-weight: 800; }
 
-/* ── 우측 패널 (Market ↔ Community 토글) — 호가창 아래 남은 공간 채움 ── */
-.panel-right {
-  background: transparent;
-  border-radius: var(--radius);
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  flex: 1;
-}
-
-.right-tabs {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  padding: 12px 0;
-}
-
-.right-tab {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text3);
-  cursor: pointer;
-  padding-bottom: 4px;
-  border-bottom: 2px solid transparent;
-  transition: color 0.15s;
-}
-
-.right-tab.active {
-  color: var(--text);
-  border-bottom-color: var(--text);
-}
-
-.right-tab-status {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  line-height: 1;
-  color: var(--text3);
-  font-size: 11px;
-  font-weight: 600;
-  position: relative;
-  top: -2px;   /* 탭의 padding-bottom(4px) 보정 — 탭 글자와 세로 중앙 정렬 */
-}
-
-.right-tab-status svg { display: block; flex-shrink: 0; position: relative; top: 0.5px; }
-
 .market-row .chg { text-align: right; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
-
-.chat-messages {
-  flex: 1;
-  overflow-y: auto;
-  padding: 12px 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.chat-msg { display: flex; gap: 8px; align-items: flex-start; }
-
-.chat-msg .avatar {
-  width: 28px; height: 28px; border-radius: 50%;
-  background: var(--surface2);
-  flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 11px; font-weight: 700; color: var(--text);
-}
-
-.chat-msg .bubble {
-  flex: 1; min-width: 0;
-}
-
-.chat-msg .body {
-  color: var(--text);
-  font-size: 13px;
-  line-height: 1.5;
-  margin-top: 3px;
-  word-break: break-word;
-}
-
-.chat-input {
-  position: relative;
-  padding: 10px 0;
-  border-top: 1px solid var(--border);
-}
-
-/* 비로그인 — 입력창 그대로(placeholder "로그인해야 이용..."), 우측 전송 아이콘 자리에 자물쇠. 클릭 불가. */
-.chat-input-locked { pointer-events: none; user-select: none; }
-
-.chat-textarea {
-  display: block;
-  box-sizing: border-box;
-  width: 100%;
-  height: 38px;                 /* 기본 1줄(20 + 패딩16 + 보더2) */
-  background: #0d0d0d;          /* 더 어둡게 */
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--text);
-  padding: 8px 44px 8px 12px;   /* 우측은 버튼 자리 확보. 세로 패딩 16 */
-  font-size: 13px;
-  line-height: 20px;
-  outline: none;
-  resize: none;
-  overflow-y: auto;
-  font-family: inherit;
-  transition: height 0.18s ease;
-}
-
-/* 클릭(포커스) 시 3줄 높이로 애니메이션 확장 */
-.chat-textarea:focus { height: 78px; }
-
-.chat-textarea::placeholder { color: var(--text3); }
-
-/* 전송 버튼 — 입력창 안 우측 하단 모서리 */
-.chat-input .chat-send {
-  position: absolute;
-  right: 8px;
-  bottom: 16px;
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: none;
-  border: 0;
-  padding: 0;
-  color: #8a8c90;
-  cursor: pointer;
-  transition: color 0.15s;
-}
-
-.chat-input .chat-send:hover { color: #b7bdc6; }
-
-.chat-input .chat-send svg { display: block; }
 
 /* ══════════════════════════════════════════════════════════════
    마켓 (web 전용 — 모바일 거래탭 종목 시트 TradeSymbolSheet 복붙·각색 + 로고 컬럼)

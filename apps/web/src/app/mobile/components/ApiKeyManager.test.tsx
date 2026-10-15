@@ -11,28 +11,13 @@ const deferred = <T,>(): Deferred<T> => {
   return { promise: new Promise<T>((ok, fail) => { resolve = ok; reject = fail; }), resolve, reject };
 };
 
-const api = vi.hoisted(() => ({ fetchApiKeys: vi.fn(), fetchMe: vi.fn() }));
-vi.mock('../../../api/server/apiKeysApi', () => ({ ...api, saveApiKey: vi.fn(), activateApiKey: vi.fn(), deleteApiKey: vi.fn() }));
+const api = vi.hoisted(() => ({ fetchApiKeys: vi.fn(), fetchMe: vi.fn(), saveApiKey: vi.fn() }));
+vi.mock('../../../api/server/apiKeysApi', () => ({ ...api, activateApiKey: vi.fn(), deleteApiKey: vi.fn() }));
 vi.mock('../../../api/server/authApi', () => ({ fetchMe: api.fetchMe }));
 
 describe('ApiKeyManager mount query', () => {
   beforeEach(() => { api.fetchApiKeys.mockReset(); api.fetchMe.mockReset().mockResolvedValue({ role: 'USER' }); });
   afterEach(async () => { await cleanupRenderComponents(); });
-
-  it('공개 Beta 키 등록은 지원되는 Bitget 계좌만 선택할 수 있다', async () => {
-    api.fetchApiKeys.mockResolvedValue([]);
-    const view = await renderComponent(<ApiKeyManager />);
-    const addButton = Array.from(view.container.querySelectorAll('button'))
-      .find(button => button.textContent === '+ 키 추가')!;
-    await act(async () => addButton.click());
-    const form = view.container.querySelector('form')!;
-    expect(form).not.toBeNull();
-    const choices = Array.from(form.querySelectorAll('button[type="button"]'))
-      .map(button => button.textContent);
-    expect(choices).toEqual(['Bitget']);
-    expect(form.textContent).toContain('Passphrase');
-    expect(form.textContent).toContain('Beta 계좌 연동은 Bitget만 지원');
-  });
 
   it('초기 조회가 완료되면 key 목록을 표시한다', async () => {
     const request = deferred<Array<{ id: number; exchange: string; botTarget: string; maskedApiKey: string; label: string; active: boolean; createdAt: string }>>();
@@ -41,6 +26,18 @@ describe('ApiKeyManager mount query', () => {
     expect(view.container.textContent).toContain('불러오는 중');
     await act(async () => request.resolve([{ id: 1, exchange: 'BITGET', botTarget: 'MAIN', maskedApiKey: 'abc***', label: 'main', active: true, createdAt: 'today' }]));
     expect(view.container.textContent).toContain('abc***');
+  });
+
+  it('새 키 입력은 Bitget만 지원하고 기존 다른 거래소 키는 보존한다', async () => {
+    api.fetchApiKeys.mockResolvedValue([{ id: 2, exchange: 'BINANCE', botTarget: 'MAIN', maskedApiKey: 'old***', label: null, active: false }]);
+    const view = await renderComponent(<ApiKeyManager />);
+    expect(view.container.textContent).toContain('old***');
+    expect(view.container.textContent).toContain('현재 연결 미지원');
+    expect(view.container.textContent).not.toContain('활성화');
+    const button = Array.from(view.container.querySelectorAll('button')).find(item => item.textContent?.includes('키 추가'))!;
+    await act(async () => button.click());
+    expect(view.container.querySelector('select')).toBeNull();
+    expect(view.container.querySelectorAll('input[type="password"]')).toHaveLength(3);
   });
 
   it('unmount 뒤 늦은 응답을 무시한다', async () => {

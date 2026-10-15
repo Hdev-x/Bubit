@@ -1,0 +1,23 @@
+.mypage-dialog { width: min(440px, calc(100vw - 32px)); max-height: min(820px, calc(100dvh - 32px)); box-sizing: border-box; padding: 0; margin: auto; border: 1px solid #30333c; border-radius: 20px; background: #17191f; color: #e8e9ec; box-shadow: 0 24px 80px #0008; overflow: auto; }
+.mypage-dialog::backdrop { background: #0009; }
+.mypage-content { padding: 28px; }
+.mypage-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.mypage-heading h2 { margin: 0; font-size: 21px; }
+.mypage-close { width: 32px; height: 32px; border: 0; border-radius: 8px; background: #24272e; color: #bfc2cb; font-size: 24px; cursor: pointer; }
+.mypage-identity { display: flex; flex-direction: column; align-items: center; gap: 12px; margin: 24px 0; }
+.mypage-identity strong { overflow-wrap: anywhere; text-align: center; }
+.mypage-identity p { margin: 0; color: #92959f; font-size: 12px; }
+.mypage-avatar { position: relative; width: 90px; height: 90px; border-radius: 24px; border: 1px solid #393d48; background: #252a35; color: #9ba6bd; padding: 0; overflow: hidden; cursor: pointer; }
+.mypage-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.mypage-avatar svg { width: 54px; height: 54px; }
+.mypage-avatar span { position: absolute; bottom: 0; left: 0; right: 0; padding: 5px; font-size: 11px; background: #0009; color: white; }
+.mypage-file { display: none; }
+.mypage-name-form label { display: block; margin-bottom: 8px; color: #bfc2cb; font-size: 13px; }
+.mypage-name-form > div { display: flex; gap: 8px; }
+.mypage-name-form input { flex: 1; min-width: 0; padding: 11px 12px; border: 1px solid #34363d; border-radius: 9px; color: #e8e9ec; background: #111318; font: inherit; font-size: 14px; }
+.mypage-name-form button { flex-shrink: 0; border: 0; border-radius: 9px; background: #2d62df; color: white; padding: 10px 16px; cursor: pointer; font: inherit; font-size: 13px; }
+.mypage-dialog button:disabled { opacity: .5; cursor: default; }
+.mypage-notice { font-size: 12px; color: #87d9b3; }
+.mypage-api { margin-top: 24px; padding-top: 24px; border-top: 1px solid #30333c; }
+.mypage-dialog :focus-visible { outline: 2px solid #6a96ff; outline-offset: 3px; }
+@media (max-width: 420px) { .mypage-content { padding: 22px; } }

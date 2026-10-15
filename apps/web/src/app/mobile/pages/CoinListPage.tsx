@@ -1,7 +1,5 @@
-import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { fetchCoinLogos } from '../../../api/server/marketApi';
-import { fetchMainTrade } from '../../../api/server/mainTradeApi';
-import { fetchUsdKrwRate } from '../../../api/exchange/exchangeRate';
 import { useCurrency } from '../../../shared/contexts/settingsContext';
 import { useCoinDetailChart } from '../../../chart/hooks/useCoinDetailChart';
 import { useMarketTickers } from '../../../hooks/market/useMarketTickers';
@@ -24,10 +22,8 @@ import { ExchangeBottomSheet } from '../components/coin-list/ExchangeBottomSheet
 import { WatchlistBottomSheet } from '../components/coin-list/WatchlistBottomSheet';
 import { CoinDetailPanel } from '../components/coin-list/CoinDetailPanel';
 import ProfileMenu from '../components/ProfileMenu';
-import PullToRefresh from '../components/PullToRefresh';
-import { useDelayedReady } from '../../../hooks/ui/useDelayedReady';
-import { useSpotValueUsdt } from '../../../hooks/account/useSpotValueUsdt';
-import { TotalAssetHero } from '../components/TotalAssetHero';
+import MarketAssetSummary from '../components/MarketAssetSummary';
+import type { AuthUser } from '../../../api/server/authApi';
 import './CoinListPage.css';
 import type { MarketFilter, SortFilter, CoinListSheet } from '../components/coin-list/types';
 
@@ -41,22 +37,17 @@ type Props = {
   onExchangeChange?: (exchange: ExchangeId) => void;
   onTickDecimalsChange?: (decimals: number) => void;
   onLogout: () => void;
-  username?: string;
+  user?: AuthUser | null;
+  onAccount?: () => void;
+  onLogin?: () => void;
 };
 
 type WatchlistSheetSize = 'half' | 'full';
 type ExchangeFilter = ExchangeId;
 
-type AssetSummary = {
-  totalAssetUsdt: number;
-  usdKrw: number;
-};
-
-const ASSET_REFRESH_MS = 10_000;
-
 const exchangeOptions = EXCHANGE_SELECT_OPTIONS;
 
-export default function CoinListPage({ active = true, selectedSymbol, onSelectSymbol, onOpenChart, onOpenTrade, onProductTypeChange, onExchangeChange, onTickDecimalsChange, onLogout, username }: Props) {
+export default function CoinListPage({ active = true, selectedSymbol, onSelectSymbol, onOpenChart, onOpenTrade, onProductTypeChange, onExchangeChange, onTickDecimalsChange, onLogout, user, onAccount, onLogin }: Props) {
   const { precisionMap } = usePricePrecision();
   const [logoMap, setLogoMap] = useState<Record<string, string>>({});
   const [displayCount, setDisplayCount] = useState(25);
@@ -76,11 +67,6 @@ export default function CoinListPage({ active = true, selectedSymbol, onSelectSy
   const [watchlistSheetSize, setWatchlistSheetSize] = useState<WatchlistSheetSize>('half');
   const [watchlistDragEnabled, setWatchlistDragEnabled] = useState(false);
   const [realtimeSymbols, setRealtimeSymbols] = useState<string[]>([]);
-  const [assetSummary, setAssetSummary] = useState<AssetSummary>(() => {
-    return { totalAssetUsdt: 0, usdKrw: 1380 };
-  });
-  const assetRequestGeneration = useRef(0);
-
   // 업비트/빗썸 = KRW 현물 전용(선물 없음). 견적통화·세그먼트 처리에 사용.
   const isKrwExchange = isKrwExchangeId(exchangeFilter);
 
@@ -135,40 +121,6 @@ export default function CoinListPage({ active = true, selectedSymbol, onSelectSy
     return () => { ignoreRequest = true; };
   }, []);
 
-  const fetchAssetSummary = useCallback(async () => {
-    const [usdKrw, main] = await Promise.all([
-      fetchUsdKrwRate(1380),
-      fetchMainTrade().catch(() => null),
-    ]);
-    return {
-      totalAssetUsdt: main?.hasKey ? main.equity : 0,
-      usdKrw,
-    };
-  }, []);
-
-  const refreshAssetSummary = useCallback(async () => {
-    const generation = ++assetRequestGeneration.current;
-    const summary = await fetchAssetSummary();
-    if (active && generation === assetRequestGeneration.current) setAssetSummary(summary);
-  }, [active, fetchAssetSummary]);
-
-  useEffect(() => {
-    if (!active) return; // 마켓 화면 밖이면 자산 요약 폴링 중단
-    const requestGeneration = assetRequestGeneration;
-    const load = () => {
-      const generation = ++requestGeneration.current;
-      return fetchAssetSummary().then((summary) => {
-        if (generation === requestGeneration.current) setAssetSummary(summary);
-      });
-    };
-    void load();
-    const intervalId = window.setInterval(load, ASSET_REFRESH_MS);
-    return () => {
-      ++requestGeneration.current;
-      window.clearInterval(intervalId);
-    };
-  }, [active, fetchAssetSummary]);
-
   const filteredTickers = useMemo(() => {
     const liveBySymbol = new Map(allTickers.map(ticker => [ticker.symbol, ticker]));
     // 업비트/빗썸은 KRW 현물뿐 → 견적통화 KRW로 고정(USDT/USDC 마켓필터 무시)
@@ -183,13 +135,6 @@ export default function CoinListPage({ active = true, selectedSymbol, onSelectSy
     }
     return ordered.map(ticker => liveBySymbol.get(ticker.symbol) ?? ticker);
   }, [allTickers, sortSnapshot, isKrwExchange, marketFilter, sortFilter]); // exchangeFilter는 isKrwExchange·allTickers·sortSnapshot을 통해 반영된다
-
-  // 현물 평가(USDT) — read-only 선물 계정과 합산.
-  const spot = useSpotValueUsdt(active);
-  const baseAssetUsdt = assetSummary.totalAssetUsdt;
-  const realtimeTotalAssetUsdt = baseAssetUsdt + spot.value;
-  // 선물(base) + 현물 시세 둘 다 도착한 뒤에만 표시(부분합 점프 방지). 1.5초 폴백.
-  const assetReady = useDelayedReady(baseAssetUsdt > 0 && spot.priced);
 
   const displayedTickers = useMemo(() => filteredTickers.slice(0, displayCount), [filteredTickers, displayCount]);
   const watchlistTickers = useMemo(() => allTickers.filter(t => watchlist.includes(t.symbol)), [allTickers, watchlist]);
@@ -265,71 +210,67 @@ export default function CoinListPage({ active = true, selectedSymbol, onSelectSy
             <span className="brand-beta-badge">Beta</span>
           </div>
           <ProfileMenu
-            username={username}
+            user={user}
             onLogout={onLogout}
-            onAccount={() => alert('내 계정 기능은 준비 중입니다.')}
+            onAccount={onAccount}
+            onLogin={onLogin}
           />
         </header>
       </div>
 
-      <PullToRefresh onRefresh={refreshAssetSummary} excludeSelector=".coin-list">
-        <section className="market-asset-summary">
-          {/* 총자산 — 거래탭 디자인 공유(사이즈업 + 눈) */}
-          <TotalAssetHero totalUsdt={realtimeTotalAssetUsdt} ready={assetReady} label="총자산" />
-        </section>
+      {user && <MarketAssetSummary key={user.username} active={active} />}
 
-        <div className="sticky-tabs-section">
-          <WatchlistStorySection
-            watchlistTickers={watchlistTickers}
-            logoMap={logoMap}
-            openDetail={openDetail}
-            onOpenAll={() => {
-              setWatchlistSheetSize('half');
-              setWatchlistDragEnabled(false);
-              setActiveSheet('WATCHLIST');
-            }}
-          />
+      <div className="sticky-tabs-section">
+        <WatchlistStorySection
+          watchlistTickers={watchlistTickers}
+          logoMap={logoMap}
+          openDetail={openDetail}
+          onOpenAll={() => {
+            setWatchlistSheetSize('half');
+            setWatchlistDragEnabled(false);
+            setActiveSheet('WATCHLIST');
+          }}
+        />
 
-          <CoinListFilterBar
-            exchangeFilter={exchangeFilter}
-            productFilter={productFilter}
-            marketFilter={marketFilter}
-            sortFilter={sortFilter}
-            activeSheet={activeSheet}
-            exchangeOptions={exchangeOptions}
-            isKrwExchange={isKrwExchange}
-            setActiveSheet={setActiveSheet}
-            setProductFilter={setProductFilter}
-            setMarketFilter={setMarketFilter}
-            setSortFilter={setSortFilter}
-            setDisplayCount={setDisplayCount}
-            setDetailOpen={setDetailOpen}
-          />
-        </div>
+        <CoinListFilterBar
+          exchangeFilter={exchangeFilter}
+          productFilter={productFilter}
+          marketFilter={marketFilter}
+          sortFilter={sortFilter}
+          activeSheet={activeSheet}
+          exchangeOptions={exchangeOptions}
+          isKrwExchange={isKrwExchange}
+          setActiveSheet={setActiveSheet}
+          setProductFilter={setProductFilter}
+          setMarketFilter={setMarketFilter}
+          setSortFilter={setSortFilter}
+          setDisplayCount={setDisplayCount}
+          setDetailOpen={setDetailOpen}
+        />
+      </div>
 
-        <section className="coin-list">
-          {isTickerLoading ? (
-            <CoinListSkeleton />
-          ) : displayedTickers.length === 0 ? (
-            <div className="no-data"><p>표시할 종목이 없습니다.</p></div>
-          ) : (
-            displayedTickers.map((ticker) => (
-              <CoinRow
-                key={ticker.symbol}
-                ticker={ticker}
-                isWatched={isWatched(ticker.symbol)}
-                onToggleWatch={(symbol) => toggleWatchlist(symbol)}
-                onClick={openDetail}
-                decimals={getDecimals(ticker)}
-                formatRate={formatRate}
-                coinColor={coinColor}
-                logoUrl={logoMap[ticker.baseSymbol]}
-                displaySymbol={formatDisplaySymbol(ticker.symbol, productFilter)}
-              />
-            ))
-          )}
-        </section>
-      </PullToRefresh>
+      <section className="coin-list">
+        {isTickerLoading ? (
+          <CoinListSkeleton />
+        ) : displayedTickers.length === 0 ? (
+          <div className="no-data"><p>표시할 종목이 없습니다.</p></div>
+        ) : (
+          displayedTickers.map((ticker) => (
+            <CoinRow
+              key={ticker.symbol}
+              ticker={ticker}
+              isWatched={isWatched(ticker.symbol)}
+              onToggleWatch={(symbol) => toggleWatchlist(symbol)}
+              onClick={openDetail}
+              decimals={getDecimals(ticker)}
+              formatRate={formatRate}
+              coinColor={coinColor}
+              logoUrl={logoMap[ticker.baseSymbol]}
+              displaySymbol={formatDisplaySymbol(ticker.symbol, productFilter)}
+            />
+          ))
+        )}
+      </section>
 
       <ExchangeBottomSheet 
         activeSheet={activeSheet}

@@ -10,13 +10,14 @@ import type { DesktopExchange } from './useDesktopCandles';
 
 // Desktop 호가 — 구독·펀딩·묶음(aggregate)·자릿수·통합 스냅샷(OB). DesktopApp에서 옮김 .
 // livePrice·priceReady는 useLivePrice 결과(거래소 티커 현재가·현재 키의 seed 완료 여부)를 받는다 — 전엔 useDesktopCandles, 전엔 loadedSymbol(심볼 비교).
-export function useOrderbookSnapshot({ symbol, exchange, isFutures, isKrw, livePrice, priceReady }: {
+export function useOrderbookSnapshot({ symbol, exchange, isFutures, isKrw, livePrice, priceReady, active = true }: {
   symbol: string;
   exchange: DesktopExchange;
   isFutures: boolean;
   isKrw: boolean;
   livePrice: number | null;
   priceReady: boolean;
+  active?: boolean;
 }) {
   const marketKey = `${exchange}|${symbol}|${isFutures}`;
   const defaultDepthScale: DepthPrecision = exchange === 'BITGET' && isFutures ? 'scale3' : 'scale2';
@@ -27,10 +28,10 @@ export function useOrderbookSnapshot({ symbol, exchange, isFutures, isKrw, liveP
     setDepthSelection((previous) => ({ marketKey, scale: typeof next === 'function' ? next(previous.scale) : next }));
   };
   const { getTickDecimals } = usePricePrecision(2);
-  const orderbook = useOrderbook(symbol, depthScale, isFutures, true, exchange, false);
+  const orderbook = useOrderbook(symbol, depthScale, isFutures, active, exchange, false);
   const funding = useFundingRate(
     symbol,
-    (exchange === 'BITGET' || exchange === 'BINANCE') && isFutures,
+    active && (exchange === 'BITGET' || exchange === 'BINANCE') && isFutures,
     exchange === 'BINANCE' ? 'BINANCE' : 'BITGET',
   );
   const scaleIndex = Number(depthScale.replace('scale', ''));

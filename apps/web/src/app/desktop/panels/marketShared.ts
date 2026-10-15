@@ -1,12 +1,11 @@
-// 웹 마켓/관심 공용 — 즐겨찾기 스토어·로고 캐시·거래대금 포맷·거래소 로더. 행·정렬 아이콘 컴포넌트는 MarketRow.tsx(: 컴포넌트 파일은 컴포넌트만 export).
+// 웹 마켓/관심 공용 — 즐겨찾기 스토어·로고 캐시·거래대금 포맷. 행·정렬 아이콘 컴포넌트는 MarketRow.tsx.
 // 모바일 거래탭 종목 시트(TradeSymbolSheet)에서 복붙·각색. 데이터/유틸은 공유 계층만 사용.
 import { useCallback, useEffect, useState } from 'react';
-import { fetchCoinFuturesTickers, fetchCoinTickers, fetchBinanceSpotTickers, fetchBinanceFuturesTickers, fetchCoinLogos } from '../../../api/server/marketApi';
-import { fetchUpbitSpotTickers, fetchBithumbSpotTickers } from '../../../api/exchange/krw/krwTickers';
-import type { CoinTicker } from '../../../shared/types/market';
-import type { ExchangeId } from '../../../shared/constants/exchanges';
+import { fetchCoinLogos } from '../../../api/server/marketApi';
+import { EXCHANGE_OPTIONS, type ExchangeId } from '../../../shared/constants/exchanges';
 
-export type Market = 'spot' | 'futures';
+export type { TickerMarket as Market } from '../../../api/server/marketTickerLists';
+import type { TickerMarket as Market } from '../../../api/server/marketTickerLists';
 
 // 즐겨찾기 키 — 거래소까지 포함(관심 패널이 거래소별로 시세를 붙일 수 있게)
 const FAV_KEY = 'web_market_favorites';
@@ -17,7 +16,17 @@ export function parseFav(key: string): FavParts {
   return { exchange: exchange as ExchangeId, market: market as Market, symbol };
 }
 function loadFavs(): string[] {
-  try { return JSON.parse(localStorage.getItem(FAV_KEY) || '[]'); } catch { return []; }
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(FAV_KEY) || '[]');
+    if (!Array.isArray(value)) return [];
+    return value.filter((key): key is string => {
+      if (typeof key !== 'string') return false;
+      if (isDivider(key)) return true;
+      const parts = key.split('|');
+      return parts.length === 3 && !!parts[2] && (parts[1] === 'spot' || parts[1] === 'futures')
+        && EXCHANGE_OPTIONS.some(exchange => exchange.id === parts[0] && (parts[1] === 'spot' || exchange.supportsFutures));
+    });
+  } catch { return []; }
 }
 
 // 구분선 항목 — 즐겨찾기 배열에 같이 저장(순서 보존). 키 형식: #div#<id>#<type>::<라벨>. 심볼 키와 충돌 안 함.
@@ -49,22 +58,17 @@ export function useDesktopFavorites() {
     return () => { window.removeEventListener(FAV_EVENT, resync); window.removeEventListener('storage', resync); };
   }, []);
   const isFav = useCallback((exchange: ExchangeId, symbol: string, market: Market) => favs.includes(favKey(exchange, symbol, market)), [favs]);
-  const toggleFav = useCallback((exchange: ExchangeId, symbol: string, market: Market) => {
-    setFavs(prev => {
-      const k = favKey(exchange, symbol, market);
-      const next = prev.includes(k) ? prev.filter(x => x !== k) : [...prev, k];
-      try { localStorage.setItem(FAV_KEY, JSON.stringify(next)); } catch { /* 무시 */ }
-      // 같은 탭의 다른 인스턴스에 즉시 통지(storage 이벤트는 같은 탭엔 안 와서 직접 디스패치).
-      window.dispatchEvent(new Event(FAV_EVENT));
-      return next;
-    });
-  }, []);
   // 편집(재정렬 등)으로 전체 순서를 교체 — 저장 + 다른 인스턴스 통지.
   const persist = useCallback((next: string[]) => {
     setFavs(next);
     try { localStorage.setItem(FAV_KEY, JSON.stringify(next)); } catch { /* 무시 */ }
     window.dispatchEvent(new Event(FAV_EVENT));
   }, []);
+  const toggleFav = useCallback((exchange: ExchangeId, symbol: string, market: Market) => {
+    const previous = loadFavs();
+    const key = favKey(exchange, symbol, market);
+    persist(previous.includes(key) ? previous.filter(value => value !== key) : [...previous, key]);
+  }, [persist]);
   const setOrder = persist;
   // 구분선(텍스트/선/둘다)을 맨 위에 추가(편집 모드에서 드래그로 원하는 위치로 이동).
   const addDivider = useCallback((type: DividerType = 'both') => {
@@ -90,11 +94,6 @@ export function useCoinLogos(): Record<string, string> {
   return logos;
 }
 
-// 토큰화 주식/지수 추정 — "변동 정확히 0% + 거래대금 큼(>1M)". 비트겟 xStocks 정렬 독식 제거.
-export function isLikelyStock(t: CoinTicker): boolean {
-  return Math.abs(t.changeRate) < 1e-9 && (t.volume || 0) > 1e6;
-}
-
 export function formatVolume(v: number): string {
   if (!Number.isFinite(v) || v <= 0) return '-';
   if (v >= 1e9) return (v / 1e9).toFixed(2) + 'B';
@@ -114,22 +113,4 @@ export function formatVolumeKrw(v: number): string {
   if (v >= 1e8) return `${Math.round(v / 1e8).toLocaleString()}억원`;
   if (v >= 1e4) return `${Math.round(v / 1e4).toLocaleString()}만원`;
   return `${Math.round(v).toLocaleString()}원`;
-}
-
-/** 거래소별 현물/선물 종목 로드 (관심 패널이 거래소별로 시세 매칭에 사용) */
-export async function loadExchangeTickers(ex: ExchangeId): Promise<{ spot: CoinTicker[]; futures: CoinTicker[] }> {
-  if (ex === 'BITGET') {
-    const [spot, futures] = await Promise.all([fetchCoinTickers(), fetchCoinFuturesTickers()]);
-    return {
-      spot: spot.filter(t => t.quoteSymbol === 'USDT' && !isLikelyStock(t)),
-      futures: futures.filter(t => t.quoteSymbol === 'USDT' && !isLikelyStock(t)),
-    };
-  }
-  if (ex === 'BINANCE') {
-    const [spot, futures] = await Promise.all([fetchBinanceSpotTickers(), fetchBinanceFuturesTickers()]);
-    return { spot: spot.filter(t => t.quoteSymbol === 'USDT'), futures: futures.filter(t => t.quoteSymbol === 'USDT') };
-  }
-  if (ex === 'UPBIT') return { spot: await fetchUpbitSpotTickers(), futures: [] };
-  if (ex === 'BITHUMB') return { spot: await fetchBithumbSpotTickers(), futures: [] };
-  return { spot: [], futures: [] };
 }

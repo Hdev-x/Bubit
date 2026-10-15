@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import './components.css';
+import './ProfileMenu.css';
+import type { AuthUser } from '../../../api/server/authApi';
 
 interface Props {
-  username?: string;
+  user?: AuthUser | null;
+  onLogin?: () => void;
   onLogout: () => void;
   onAccount?: () => void;
 }
@@ -12,7 +15,7 @@ interface Props {
  * - 스퀘어클(둥근 사각) 아바타 버튼
  * - 드롭다운: 사용자 이름 / 내 정보 / 로그아웃
  * ============================================================ */
-export default function ProfileMenu({ username, onLogout, onAccount }: Props) {
+export default function ProfileMenu({ user, onLogout, onAccount, onLogin }: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -28,19 +31,19 @@ export default function ProfileMenu({ username, onLogout, onAccount }: Props) {
 
   return (
     <div ref={ref} className="pm">
-      <button type="button" aria-label="프로필" className="pm-btn" onClick={() => setOpen((v) => !v)}>
-        <UserIcon size={22} />
+      <button type="button" aria-label="프로필" className="pm-btn" aria-expanded={open} onClick={() => { if (!user) { onLogin?.(); return; } setOpen((v) => !v); }}>
+        {user?.avatarUrl ? <img className="pm-photo" src={user.avatarUrl} alt="" /> : <UserIcon size={22} />}
       </button>
 
-      {open && (
+      {open && user && (
         <div className="pm-menu">
           <div className="pm-head">
             <div className="pm-avatar">
-              <UserIcon size={22} />
+              {user?.avatarUrl ? <img className="pm-photo" src={user.avatarUrl} alt="" /> : <UserIcon size={22} />}
             </div>
             <div className="pm-meta">
-              <span className="pm-name">{username ?? '사용자'}</span>
-              <span className="pm-sub">로그인됨</span>
+              <span className="pm-name">{user.name || user.username}</span>
+              <span className="pm-sub">@{user.username}</span>
             </div>
           </div>
 
@@ -54,7 +57,7 @@ export default function ProfileMenu({ username, onLogout, onAccount }: Props) {
               onAccount?.();
             }}
           >
-            내 정보 <span className="pm-arrow">›</span>
+            마이페이지 <span className="pm-arrow">›</span>
           </button>
 
           <button

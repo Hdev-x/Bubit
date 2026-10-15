@@ -100,6 +100,30 @@ class WebSocketAuthenticationInterceptorTest {
     }
 
     @Test
+    void communityReadsArePublicButClientsCannotPublishCommunityEvents() {
+        JwtProvider jwtProvider = new JwtProvider(SECRET, 60_000);
+        WebSocketAuthenticationInterceptor interceptor = new WebSocketAuthenticationInterceptor(jwtProvider);
+        Message<byte[]> connect = stomp(StompCommand.CONNECT, null);
+        interceptor.preSend(connect, CHANNEL);
+        Principal guest = originalAccessor(connect).getUser();
+        for (String destination : List.of("/topic/community/board", "/topic/community/feed/bitget/futures/BTCUSDT",
+                "/topic/community/feed/upbit/spot/KRW-BTC", "/topic/community/feed/binance/spot/币安人生USDT")) {
+            assertDoesNotThrow(() -> interceptor.preSend(subscription(guest, destination), CHANNEL));
+        }
+        for (String destination : List.of("/topic/community/**", "/topic/community/feed/bitget/futures/*",
+                "/topic/community/feed/other/spot/BTCUSDT", "/topic/community/board/extra")) {
+            assertAuthenticationFailed(() -> interceptor.preSend(subscription(guest, destination), CHANNEL));
+        }
+        Message<byte[]> authenticated = stomp(StompCommand.CONNECT,
+                List.of("Bearer " + jwtProvider.generateToken("tester", "USER")));
+        interceptor.preSend(authenticated, CHANNEL);
+        Message<byte[]> send = stomp(StompCommand.SEND, null);
+        originalAccessor(send).setUser(originalAccessor(authenticated).getUser());
+        originalAccessor(send).setDestination("/topic/community/board");
+        assertAuthenticationFailed(() -> interceptor.preSend(send, CHANNEL));
+    }
+
+    @Test
     void stompAliasAuthenticatesAndUnauthenticatedSubscribeAndSendFailClosed() {
         JwtProvider jwtProvider = new JwtProvider(SECRET, 60_000);
         WebSocketAuthenticationInterceptor interceptor = new WebSocketAuthenticationInterceptor(jwtProvider);

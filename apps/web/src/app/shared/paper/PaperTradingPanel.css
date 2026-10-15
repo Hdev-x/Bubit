@@ -1,0 +1,39 @@
+.paper-panel { color: var(--text-primary, #e5e7eb); padding: 18px; font-size: 13px; }
+.paper-panel h2, .paper-panel h3, .paper-panel p, .paper-panel dl { margin: 0; }
+.paper-panel h2 { font-size: 17px; margin-bottom: 4px; }
+.paper-panel h3 { font-size: 13px; margin: 22px 0 12px; }
+.paper-panel h3 span { color: #8b95a5; margin-left: 4px; }
+.paper-panel button, .paper-panel input, .paper-panel select { font: inherit; }
+.paper-panel button { color: inherit; border: 1px solid #303642; border-radius: 8px; background: #20242c; padding: 7px 10px; cursor: pointer; }
+.paper-panel button:disabled { opacity: .45; cursor: default; }
+.paper-panel button:focus-visible, .paper-panel input:focus-visible, .paper-panel select:focus-visible { outline: 2px solid #7eafff; outline-offset: 2px; }
+.paper-panel-header, .paper-ticket-heading, .paper-orders li, .paper-position > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.paper-panel .paper-muted { color: #8b95a5; line-height: 1.6; }
+.paper-balances { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 20px 0; }
+.paper-balances dt, .paper-position dt { color: #8b95a5; font-size: 12px; }
+.paper-balances dd { margin: 6px 0 0; font-size: 18px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.paper-balances small { font-size: 10px; font-weight: 400; }
+.paper-ticket { display: grid; gap: 12px; padding: 16px; border: 1px solid #303642; border-radius: 12px; }
+.paper-ticket-heading { flex-wrap: wrap; }
+.paper-ticket-heading span { color: #8b95a5; font-size: 11px; }
+.paper-ticket label { display: grid; gap: 6px; color: #a8b0bd; font-size: 12px; min-width: 0; }
+.paper-ticket input, .paper-ticket select { width: 100%; box-sizing: border-box; min-width: 0; border: 1px solid #303642; color: #e5e7eb; background: #15181e; padding: 10px; border-radius: 8px; }
+.paper-ticket input:disabled { opacity: .65; }
+.paper-ticket-fields, .paper-order-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.paper-percentages { display: flex; gap: 6px; }
+.paper-percentages button { flex: 1; padding: 5px; font-size: 11px; }
+.paper-panel .paper-long { background: #146d58; border-color: #146d58; color: white; }
+.paper-panel .paper-short { background: #ad3e4d; border-color: #ad3e4d; color: white; }
+.paper-panel .paper-terms { font-size: 11px; margin-top: 12px; }
+.paper-panel .paper-error { color: #ff8f99; line-height: 1.6; padding: 10px 0; }
+.paper-reset-confirm { padding: 12px; background: #292028; border-radius: 8px; margin-bottom: 12px; }
+.paper-reset-confirm p { margin-bottom: 10px; }
+.paper-reset-confirm button + button { margin-left: 8px; }
+.paper-positions, .paper-orders { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.paper-position, .paper-orders li { border: 1px solid #303642; border-radius: 10px; padding: 12px; }
+.paper-position > div span, .paper-orders span { color: #8b95a5; font-size: 11px; }
+.paper-position dl { display: grid; gap: 6px; margin: 12px 0; }
+.paper-position dl div { display: flex; justify-content: space-between; gap: 10px; }
+.paper-position dd { margin: 0; font-variant-numeric: tabular-nums; }
+.paper-position > button { width: 100%; }
+.paper-orders li > div { display: grid; gap: 5px; }

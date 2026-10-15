@@ -7,7 +7,7 @@
 - PostgreSQL
 - Python 3 (`npm run check:css`에서 사용)
 
-이 공개 Beta에는 자동매매·Paper Trading·Backtest·Push·Admin 코드와 `trading` profile이 없습니다. API는 실제 거래소 주문을 실행하지 않으며, 외부 서비스에 배포하는 절차도 이 문서에 포함하지 않습니다.
+이 공개 Beta에는 자동매매·Backtest·Push·Admin·내부 워커 코드와 `trading` profile이 없습니다. 수동 모의투자는 별도 `paper` profile에서 활성화합니다. API는 실제 거래소 주문을 실행하지 않으며, 외부 서비스에 배포하는 절차도 이 문서에 포함하지 않습니다.
 
 ## 첫 검증
 
@@ -33,9 +33,14 @@ API test는 H2 in-memory DB와 테스트 전용 더미 값을 사용합니다. P
 
 ```bash
 psql -d bubit -f docs/schema.sql
+psql -d bubit -f docs/sql/profile.sql
+psql -d bubit -f docs/sql/community.sql
+psql -d bubit -f docs/sql/paper_trading.sql
 ```
 
-`docs/schema.sql`은 PostgreSQL용이며 `members`, 암호화된 거래소 API key, 수동 매수 평균가 table만 만듭니다. 애플리케이션은 schema를 자동 변경하지 않으므로 schema 변경이 생기면 SQL을 검토한 뒤 직접 적용해야 합니다.
+`docs/schema.sql`은 회원·암호화된 API key·수동 평균가의 기본 테이블을 만듭니다. 후속 SQL은 위 순서대로 프로필·커뮤니티·모의투자 테이블을 추가합니다. 프로필은 로그인·`/me`에서도 조회하므로 **SQL을 먼저 적용한 뒤 API를 시작**해야 합니다. 기존 DB는 기본 schema를 다시 만들지 않고 후속 SQL과 앱 역할 권한을 검토해 적용하세요.
+
+애플리케이션은 schema를 자동 변경하지 않습니다. 신규 테이블은 RLS를 활성화하고 브라우저 역할의 직접 접근을 차단합니다. `bubit_app` 역할이 존재하면 서버용 권한·정책을 부여하며, 다른 앱 역할을 쓰는 환경은 해당 역할의 권한·정책을 별도로 설정해야 합니다.
 
 ## API 설정과 실행
 
@@ -61,10 +66,10 @@ export BUBIT_ENCRYPTION_KEY="$(openssl rand -base64 32)"
 
 ```bash
 cd apps/api
-./gradlew bootRun
+./gradlew bootRun --args='--spring.profiles.active=paper'
 ```
 
-API는 `http://localhost:8081`에서 실행됩니다.
+API는 `http://localhost:8081`에서 실행됩니다. `paper`는 가상계좌와 지정가 체결 스케줄러만 활성화하며 거래소 자격증명·실주문·워커를 사용하지 않습니다. 모의투자를 사용하지 않으면 profile 인자를 생략할 수 있습니다.
 
 ## Web 실행
 

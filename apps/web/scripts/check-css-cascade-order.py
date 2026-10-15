@@ -16,16 +16,19 @@
 실행: apps/web에서 `npm run check:css` (빌드 뒤에 돌리면 3·4번까지 검사). 문제가 있으면 exit 1.
 """
 import glob
+from html.parser import HTMLParser
 import hashlib
 import json
 import os
+from pathlib import Path
 import re
 import sys
+from urllib.parse import urlsplit
 
 ORIGIN_SNAPSHOT = os.path.join(os.path.dirname(__file__), 'fixtures', 'css-cascade-origin.json')
 APPS = [
     dict(app='mobile', shell='src/app/mobile/styles/mobile.css', comp_globs=['src/app/mobile/**/*.css', 'src/chart/**/*.css', 'src/shared/**/*.css'],
-         entry='src/app/mobile/main.tsx', dist='dist',
+         entry='src/app/mobile/main.tsx', dist='dist', html='index.html',
          # (선택자, 속성, 기대값). 'SOURCE:<파일>'은 그 파일의 단독 선택자 규칙에 적힌 값이 번들 최종값이어야 한다는 뜻
          # 단독 선택자인지만 보면 값이 바뀐 회귀를 통과시키므로 값도 비교한다.
          final=[('.coin-chart-page', 'background', 'SOURCE:src/app/mobile/pages/CoinChartPage.css'),
@@ -35,7 +38,7 @@ APPS = [
          # (선택자, media 조건) — 조건은 '<=410px' 형태로 정규화해 정확히 비교한다.
          media=[('.chart-tool-strip', '<=410px'), ('.chart-tool-strip', '>=860px')]),
     dict(app='desktop', shell='src/app/desktop/styles/desktop.css', comp_globs=['src/app/desktop/**/*.css', 'src/chart/**/*.css', 'src/shared/**/*.css'],
-         entry='src/app/desktop/main.tsx', dist='dist-desktop',
+         entry='src/app/desktop/main.tsx', dist='dist-desktop', html='desktop.html',
          final=[], media=[]),
 ]
 
@@ -192,11 +195,35 @@ def check_entry_import_order(cfg):
     return [f'{cfg["entry"]}: 셸 CSS보다 앞에 컴포넌트 import "{e}"' for e in early]
 
 
+class StylesheetLinks(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.hrefs = []
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag == 'link' and 'stylesheet' in (attrs.get('rel') or '').lower().split():
+            if attrs.get('href'):
+                self.hrefs.append(attrs['href'])
+
+
 def load_bundle(cfg):
-    css_files = glob.glob(os.path.join(cfg['dist'], 'assets', '*.css'))
+    css_files = sorted(glob.glob(os.path.join(cfg['dist'], 'assets', '*.css')))
     if not css_files:
         return None
-    return ''.join(open(f, encoding='utf-8').read() for f in sorted(css_files))
+    parser = StylesheetLinks()
+    with open(os.path.join(cfg['dist'], cfg['html']), encoding='utf-8') as entry:
+        parser.feed(entry.read())
+    assets = {os.path.basename(path): path for path in css_files}
+    ordered = []
+    for href in parser.hrefs:
+        url = urlsplit(href)
+        path = assets.get(os.path.basename(url.path))
+        if not url.scheme and not url.netloc and path and path not in ordered:
+            ordered.append(path)
+    # 정적 stylesheet는 HTML 순서로 로드되고, lazy chunk는 그 뒤에 삽입된다.
+    ordered.extend(path for path in css_files if path not in ordered)
+    return ''.join(Path(path).read_text(encoding='utf-8') for path in ordered)
 
 
 def check_bundle_order(cfg, bundle, shell_rules, comp_files):
@@ -206,7 +233,7 @@ def check_bundle_order(cfg, bundle, shell_rules, comp_files):
     if shell_idx < 0:
         return [f'번들에서 셸 첫 규칙 "{shell_sel}"을 찾지 못했다']
     for f in comp_files:
-        rs = rules(open(f, encoding='utf-8').read())
+        rs = rules(Path(f).read_text(encoding='utf-8'))
         if not rs:
             continue
         idx = bundle.find(minified(rs[0][1]) + '{')

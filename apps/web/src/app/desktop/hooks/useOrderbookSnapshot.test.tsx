@@ -8,9 +8,11 @@ const mocks = vi.hoisted(() => ({
   book: null as null | { key: string; asks: Array<{ price: number; size: number }>; bids: Array<{ price: number; size: number }> },
   decimals: 2,
   funding: '0.01%',
+  useBook: vi.fn(),
+  useFunding: vi.fn(),
 }));
-vi.mock('../../../hooks/market/useOrderbook', () => ({ useOrderbook: () => mocks.book }));
-vi.mock('../../../hooks/market/useFundingRate', () => ({ useFundingRate: () => mocks.funding }));
+vi.mock('../../../hooks/market/useOrderbook', () => ({ useOrderbook: (...args: unknown[]) => { mocks.useBook(...args); return mocks.book; } }));
+vi.mock('../../../hooks/market/useFundingRate', () => ({ useFundingRate: (...args: unknown[]) => { mocks.useFunding(...args); return mocks.funding; } }));
 vi.mock('../../../hooks/market/usePricePrecision', () => ({ usePricePrecision: () => ({ getTickDecimals: () => mocks.decimals }) }));
 
 type Props = Parameters<typeof useOrderbookSnapshot>[0];
@@ -20,6 +22,13 @@ const book = (key: string, price: number) => ({ key, asks: [{ price: price + 1, 
 afterEach(async () => { await cleanupRenderHooks(); mocks.book = null; mocks.decimals = 2; mocks.funding = '0.01%'; });
 
 describe('useOrderbookSnapshot', () => {
+  it('숨긴 호가 패널은 호가·펀딩 조회를 비활성화하고 다시 켜면 복구한다', async () => {
+    const hook = await renderHook(useOrderbookSnapshot, props({ active: false }));
+    expect(mocks.useBook).toHaveBeenLastCalledWith('BTCUSDT', 'scale3', true, false, 'BITGET', false);
+    expect(mocks.useFunding).toHaveBeenLastCalledWith('BTCUSDT', false, 'BITGET');
+    await hook.rerender(props({ active: true }));
+    expect(mocks.useBook).toHaveBeenLastCalledWith('BTCUSDT', 'scale3', true, true, 'BITGET', false);
+  });
   it('호가와 현재가가 함께 준비될 때만 완성 묶음을 교체하고 A→B→A 미완료에서는 A를 유지한다', async () => {
     mocks.book = book('BITGET|BTCUSDT|true', 100);
     const hook = await renderHook(useOrderbookSnapshot, props());

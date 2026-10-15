@@ -1,0 +1,25 @@
+.mobile-trade-mode {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  background: var(--bg-primary, #0b0e11);
+}
+
+.mobile-trade-mode button {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 9px 14px;
+  color: #a6abb3;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.mobile-trade-mode button[aria-pressed="true"] {
+  background: rgba(255, 255, 255, 0.09);
+  color: #fff;
+}
+
+.mobile-paper-trading {
+  padding: 8px 16px calc(88px + env(safe-area-inset-bottom));
+}

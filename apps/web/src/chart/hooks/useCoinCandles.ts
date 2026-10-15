@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { subscribeBinanceCandle, subscribeBinanceKline, subscribeCoinCandle } from '../../api/server/coinRealtime';
+import { listenRealtimeTicker, subscribeBinanceCandle, subscribeBinanceKline, subscribeCoinCandle } from '../../api/server/coinRealtime';
 import { subscribeKrwCandle } from '../../api/exchange/krw/krwRealtime';
 import { subscribeBitgetKline } from '../../api/exchange/bitget/klineRealtime';
 import type { CandleMessage } from '../../api/server/coinRealtime';
@@ -20,6 +20,7 @@ type LoadCandles = (granularity: string, limit: number, endTime?: string) => Pro
 const MAX_CANDLES = 10000;
 
 type Ticker = {
+  ts?: number;
   time: number;
   high: number;
   low: number;
@@ -171,6 +172,7 @@ export function useCoinCandles({
   useEffect(() => {
     const currentKey = marketKey;
     let subscriptionActive = true;
+    let latestPriceTick: { ts: number; close: number; bucket: number } | null = null;
     const intervalSec = INTERVAL_SECONDS[timeframe.granularity];
     const onTick = (ticker: Ticker) => {
       if (!subscriptionActive) return;
@@ -189,6 +191,7 @@ export function useCoinCandles({
         const lastTime = Number(anchor.time);
         bucketTime = lastTime + Math.floor((ticker.time - lastTime) / intervalSec) * intervalSec;
       }
+      if (ticker.ts != null) latestPriceTick = { ts: ticker.ts, close: ticker.close, bucket: bucketTime };
       refreshRef.current?.prices.add(bucketTime);
       // 캔들 배열이 이전 선택 것(fetch 실패로 유지 중)이면 현재가만 갱신하고 봉은 건드리지 않음
       if (!canApplyCandle(loadedKeyRef.current, candlesKeyRef.current, currentKey)) return;
@@ -228,6 +231,12 @@ export function useCoinCandles({
       if (!subscriptionActive) return;
       if (requestRef.current.key !== currentKey || requestRef.current.status !== 'ready') return;
       if (!canApplyPrice(loadedKeyRef.current, currentKey)) return;
+      // 늦은 kline도 거래량은 보강하되 이미 받은 최신 현재가를 되돌리지 않는다.
+      const preserveLivePrice = latestPriceTick != null && c.ts != null && c.ts < latestPriceTick.ts;
+      if (preserveLivePrice && latestPriceTick) {
+        if (c.time !== latestPriceTick.bucket) return;
+        c = { ...c, close: latestPriceTick.close, high: Math.max(c.high, latestPriceTick.close), low: Math.min(c.low, latestPriceTick.close) };
+      }
       setLivePrice(c.close);
       refreshRef.current?.prices.add(c.time);
       refreshRef.current?.volumes.add(c.time);
@@ -238,7 +247,7 @@ export function useCoinCandles({
         const last = nextCandles[nextCandles.length - 1];
         const lastTime = Number(last.time);
         if (lastTime === c.time) {
-          nextCandles[nextCandles.length - 1] = { time: last.time, open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume };
+          nextCandles[nextCandles.length - 1] = { time: last.time, open: c.open, high: preserveLivePrice ? Math.max(last.high, c.high) : c.high, low: preserveLivePrice ? Math.min(last.low, c.low) : c.low, close: c.close, volume: c.volume };
           return nextCandles;
         }
         const action = classifyIncomingBar(lastTime, c.time, timeframe.granularity);
@@ -260,10 +269,16 @@ export function useCoinCandles({
     // liveCandle + Binance/Bitget: kline WS로 현재 캔들 OHLCV 실시간(거래량 포함).
     // Binance는 지역차단이라 브라우저 직결 대신 백엔드 릴레이 토픽(subscribeBinanceKline=STOMP)을 구독한다.
     if (liveCandle && !isKrw) {
+      const tickerTopic = isBinance ? `/topic/binance-${isFutures ? 'futures' : 'spot'}/${symbol}`
+        : `/topic/coin${isFutures ? '-futures' : ''}/${symbol}`;
+      const tickerSubscription = listenRealtimeTicker(tickerTopic, (ticker) => onTick({
+        ts: ticker.ts, time: Math.floor((ticker.ts ?? Date.now()) / 1000),
+        high: ticker.price, low: ticker.price, close: ticker.price, volume: 0,
+      }));
       const subscription = isBinance
         ? subscribeBinanceKline(symbol, isFutures, timeframe.granularity, onKline)
         : subscribeBitgetKline(symbol, isFutures, timeframe.channel, onKline);
-      return () => { subscriptionActive = false; subscription.close(); };
+      return () => { subscriptionActive = false; tickerSubscription.close(); subscription.close(); };
     }
 
     // 그 외(모바일 전 거래소 / liveCandle KRW): 기존 티커 경로로 OHLC·현재가 갱신(거래량은 동결)
