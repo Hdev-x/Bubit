@@ -10,6 +10,7 @@ export function CommunityPostCard({ post, context, user, onLogin, onChanged }: P
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [showComments, setShowComments] = useState(false);
+  const [showActions, setShowActions] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
 
@@ -23,32 +24,36 @@ export function CommunityPostCard({ post, context, user, onLogin, onChanged }: P
   }
 
   return <article className="community-post">
-    <header className="community-post-author">
-      {post.avatarUrl ? <img src={post.avatarUrl} alt="" className="community-avatar" loading="lazy" /> : <span className="community-avatar">{post.authorName.slice(0, 1)}</span>}
-      <strong>{post.authorName}</strong>
-      <time dateTime={post.createdAt}>{new Date(post.createdAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</time>
-      {post.owned && user && <div className="community-owner-actions">
-        <button type="button" onClick={() => setEditing(!editing)} disabled={pending}>수정</button>
-        <button type="button" onClick={() => setConfirmDelete(!confirmDelete)} disabled={pending}>삭제</button>
+    {post.avatarUrl ? <img src={post.avatarUrl} alt="" className="community-avatar" loading="lazy" /> : <span className="community-avatar">{post.authorName.slice(0, 1).toUpperCase()}</span>}
+    <div className="community-bubble">
+      <header className="community-post-author">
+        <strong>{post.authorName}</strong>
+        <time dateTime={post.createdAt} title={new Date(post.createdAt).toLocaleString('ko-KR')}>{new Date(post.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })}</time>
+        <button type="button" className="community-post-more" aria-label="메시지 메뉴" aria-expanded={showActions} onClick={() => setShowActions(!showActions)}>···</button>
+      </header>
+      {showActions && <div className="community-post-actions">
+        <button type="button" aria-pressed={post.liked} disabled={pending} onClick={() => void mutate(() => likeCommunityPost(post.id, !post.liked))}>♡ {post.likeCount}</button>
+        {post.parentId == null && <button type="button" aria-expanded={showComments} onClick={() => setShowComments(!showComments)}>댓글 {post.commentCount}</button>}
+        {post.owned && user && <>
+          <button type="button" onClick={() => setEditing(!editing)} disabled={pending}>수정</button>
+          <button type="button" onClick={() => setConfirmDelete(!confirmDelete)} disabled={pending}>삭제</button>
+        </>}
       </div>}
-    </header>
-    {editing ? <CommunityComposer context={context} parentId={post.parentId ?? undefined} post={post}
-      onSaved={() => { setEditing(false); onChanged(); }} onCancel={() => setEditing(false)} /> : <>
-      {post.title && <h4>{post.title}</h4>}
-      <p className="community-post-body">{post.body}</p>
-      {post.imageId && <a href={`/api/community/images/${post.imageId}`} target="_blank" rel="noreferrer"><img className="community-post-image"
-        src={`/api/community/images/${post.imageId}`} alt="게시글 첨부 이미지" loading="lazy" /></a>}
-    </>}
-    {confirmDelete && <div className="community-delete-confirm">이 글을 삭제할까요?
-      <button type="button" disabled={pending} onClick={() => void mutate(() => deleteCommunityPost(post.id))}>삭제</button>
-      <button type="button" disabled={pending} onClick={() => setConfirmDelete(false)}>취소</button>
-    </div>}
-    <footer className="community-post-actions">
-      <button type="button" aria-pressed={post.liked} disabled={pending} onClick={() => void mutate(() => likeCommunityPost(post.id, !post.liked))}>♡ {post.likeCount}</button>
-      {post.parentId == null && <button type="button" aria-expanded={showComments} onClick={() => setShowComments(!showComments)}>댓글 {post.commentCount}</button>}
-    </footer>
-    {error && <p className="community-error" role="alert">{error}</p>}
-    {showComments && <CommunityComments parent={post} context={context} user={user} onLogin={onLogin} onChanged={onChanged} />}
+      {editing ? <CommunityComposer context={context} parentId={post.parentId ?? undefined} post={post}
+        onSaved={() => { setEditing(false); onChanged(); }} onCancel={() => setEditing(false)} /> : <>
+        {post.title && <h4>{post.title}</h4>}
+        <p className="community-post-body">{post.body}</p>
+        {post.imageId && <a href={`/api/community/images/${post.imageId}`} target="_blank" rel="noreferrer"><img className="community-post-image"
+          src={`/api/community/images/${post.imageId}`} alt="게시글 첨부 이미지" loading="lazy" /></a>}
+      </>}
+      {confirmDelete && <div className="community-delete-confirm">이 글을 삭제할까요?
+        <button type="button" disabled={pending} onClick={() => void mutate(() => deleteCommunityPost(post.id))}>삭제</button>
+        <button type="button" disabled={pending} onClick={() => setConfirmDelete(false)}>취소</button>
+      </div>}
+      {!showActions && (post.likeCount > 0 || post.commentCount > 0) && <button type="button" className="community-post-summary" aria-label="반응과 댓글 보기" onClick={() => setShowActions(true)}>♡ {post.likeCount} · 댓글 {post.commentCount}</button>}
+      {error && <p className="community-error" role="alert">{error}</p>}
+      {showComments && <CommunityComments parent={post} context={context} user={user} onLogin={onLogin} onChanged={onChanged} />}
+    </div>
   </article>;
 }
 

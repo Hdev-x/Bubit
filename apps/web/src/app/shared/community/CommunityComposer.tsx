@@ -27,10 +27,22 @@ export function CommunityComposer({ context, parentId, post, onSaved, onCancel }
     finally { setPending(false); }
   }
 
-  return <form className="community-composer" onSubmit={submit}>
+  const compact = !isBoard && !post;
+  return <form className={`community-composer${compact ? ' community-composer-compact' : ''}`} onSubmit={submit}>
     {isBoard && <input aria-label="글 제목" placeholder="제목" maxLength={120} value={title} onChange={event => setTitle(event.target.value)} disabled={pending} />}
-    <textarea aria-label={parentId ? '댓글 내용' : '글 내용'} placeholder={parentId ? '댓글을 남겨보세요' : '생각을 나눠보세요'} maxLength={2000}
-      value={body} onChange={event => setBody(event.target.value)} disabled={pending} rows={post || isBoard ? 4 : 2} />
+    <div className="community-input">
+      <textarea className="community-textarea" aria-label={parentId ? '댓글 내용' : '글 내용'} placeholder={parentId ? '댓글을 남겨보세요' : '메시지를 입력하세요...'} maxLength={2000}
+        value={body} onChange={event => setBody(event.target.value)} disabled={pending} rows={compact ? 1 : 4}
+        onKeyDown={event => {
+          if (event.key === 'Escape') event.currentTarget.blur();
+          if (compact && event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+            event.preventDefault(); event.currentTarget.form?.requestSubmit();
+          }
+        }} />
+      {compact && <button type="submit" className="community-send" aria-label={pending ? '전송 중' : '전송'} disabled={pending || !body.trim()}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 7v4H5.83l3.58-3.59L8 6l-6 6 6 6 1.41-1.41L5.83 13H21V7z" /></svg>
+      </button>}
+    </div>
     <div className="community-compose-actions">
       {!post && <label className="community-attach">사진
         <input type="file" accept="image/png,image/jpeg" aria-label="사진 첨부 (JPG·PNG, 1MB 이하)" disabled={pending} onChange={event => {
@@ -44,8 +56,9 @@ export function CommunityComposer({ context, parentId, post, onSaved, onCancel }
       {image && <button type="button" className="community-attachment" onClick={() => setImage(null)} disabled={pending}>{image.name} ×</button>}
       <span className="community-char-count">{body.length}/2000</span>
       {onCancel && <button type="button" onClick={onCancel} disabled={pending}>취소</button>}
-      <button type="submit" className="community-primary" disabled={pending || !body.trim() || (isBoard && !title.trim())}>{pending ? '저장 중…' : post ? '수정' : '등록'}</button>
+      {!compact && <button type="submit" className="community-primary" disabled={pending || !body.trim() || (isBoard && !title.trim())}>{pending ? '저장 중…' : post ? '수정' : '등록'}</button>}
     </div>
+    {compact && image && <span className="community-attached-name">{image.name}</span>}
     {error && <p className="community-error" role="alert">{error}</p>}
   </form>;
 }
