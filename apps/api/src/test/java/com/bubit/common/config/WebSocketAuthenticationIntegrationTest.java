@@ -153,9 +153,7 @@ class WebSocketAuthenticationIntegrationTest {
                 assertTrue(connected.startsWith("CONNECTED"), connected);
 
                 socket.sendMessage(new TextMessage(frame));
-                String rejected = handler.events.poll(5, TimeUnit.SECONDS);
-                assertNotNull(rejected, frame);
-                assertTrue(rejected.startsWith("ERROR"), rejected);
+                assertRejected(handler);
             } finally {
                 socket.close();
             }
@@ -188,7 +186,7 @@ class WebSocketAuthenticationIntegrationTest {
             RawHandler handler = new RawHandler();
             WebSocketSession socket = rawConnect("/ws-coin", handler);
             socket.sendMessage(new TextMessage(frame));
-            assertTrue(handler.events.poll(5, TimeUnit.SECONDS).contains("ERROR"));
+            assertRejected(handler);
             socket.close();
         }
     }
@@ -234,6 +232,17 @@ class WebSocketAuthenticationIntegrationTest {
 
     private static String connectFrame(String token) {
         return "CONNECT\naccept-version:1.2\nAuthorization:Bearer " + token + "\n\n\0";
+    }
+
+    private static void assertRejected(RawHandler handler) throws InterruptedException {
+        String event = handler.events.poll(5, TimeUnit.SECONDS);
+        assertNotNull(event);
+        // STOMP 1.2 permits the final ERROR frame to be lost on close; Spring rejects with code 1002.
+        assertTrue(event.startsWith("ERROR")
+                || event.equals("CLOSED " + CloseStatus.PROTOCOL_ERROR.getCode()), event);
+        CloseStatus closeStatus = handler.closes.poll(5, TimeUnit.SECONDS);
+        assertNotNull(closeStatus);
+        assertEquals(CloseStatus.PROTOCOL_ERROR.getCode(), closeStatus.getCode());
     }
 
     private void assertLogsDoNotContain(String token) {
@@ -303,6 +312,7 @@ class WebSocketAuthenticationIntegrationTest {
 
     private static final class RawHandler extends TextWebSocketHandler {
         private final BlockingQueue<String> events = new LinkedBlockingQueue<>();
+        private final BlockingQueue<CloseStatus> closes = new LinkedBlockingQueue<>();
 
         @Override
         protected void handleTextMessage(WebSocketSession session, TextMessage message) {
@@ -311,7 +321,8 @@ class WebSocketAuthenticationIntegrationTest {
 
         @Override
         public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
-            events.add("CLOSED");
+            closes.add(status);
+            events.add("CLOSED " + status.getCode());
         }
     }
 }
