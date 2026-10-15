@@ -11,13 +11,21 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Component;
 
+import java.security.Principal;
 import java.util.List;
+import java.util.regex.Pattern;
 
 @Component
 public class WebSocketAuthenticationInterceptor implements ChannelInterceptor {
 
     static final String AUTHORIZATION = "Authorization";
     static final String AUTHENTICATION_FAILED = "WebSocket authentication failed";
+    private static final Principal PUBLIC_MARKET_GUEST = () -> "public-market-guest";
+    private static final String SYMBOL = "[\\p{L}\\p{N}_-]+";
+    private static final Pattern PUBLIC_MARKET_DESTINATION = Pattern.compile(
+            "/topic/(?:(?:coin(?:-futures)?|binance-(?:spot|futures))/" + SYMBOL
+                    + "|binance-kline/(?:spot|futures)/" + SYMBOL
+                    + "/(?:1m|3m|5m|15m|30m|1h|2h|4h|6h|8h|12h|1d|3d|1w|1M))");
 
     private final JwtProvider jwtProvider;
 
@@ -38,8 +46,9 @@ public class WebSocketAuthenticationInterceptor implements ChannelInterceptor {
                 throw authenticationFailed();
             }
             authenticateConnect(accessor);
-        } else if ((StompCommand.SUBSCRIBE.equals(command) || StompCommand.SEND.equals(command))
-                && !isAuthenticated(accessor)) {
+        } else if (StompCommand.SUBSCRIBE.equals(command) && !canSubscribe(accessor)) {
+            throw authenticationFailed();
+        } else if (StompCommand.SEND.equals(command) && !isAuthenticated(accessor)) {
             throw authenticationFailed();
         }
         return message;
@@ -49,7 +58,12 @@ public class WebSocketAuthenticationInterceptor implements ChannelInterceptor {
         List<String> values = accessor.getNativeHeader(AUTHORIZATION);
         accessor.setNativeHeader(AUTHORIZATION, null);
 
-        if (values == null || values.size() != 1) {
+        if (values == null) {
+            // Only CONNECT can assign this marker; raw subscriptions cannot impersonate a guest.
+            accessor.setUser(PUBLIC_MARKET_GUEST);
+            return;
+        }
+        if (values.size() != 1) {
             throw authenticationFailed();
         }
 
@@ -78,6 +92,13 @@ public class WebSocketAuthenticationInterceptor implements ChannelInterceptor {
 
     private boolean isAuthenticated(StompHeaderAccessor accessor) {
         return accessor.getUser() instanceof Authentication authentication && authentication.isAuthenticated();
+    }
+
+    private boolean canSubscribe(StompHeaderAccessor accessor) {
+        String destination = accessor.getDestination();
+        return isAuthenticated(accessor)
+                || (accessor.getUser() == PUBLIC_MARKET_GUEST && destination != null
+                    && PUBLIC_MARKET_DESTINATION.matcher(destination).matches());
     }
 
     private AccessDeniedException authenticationFailed() {
