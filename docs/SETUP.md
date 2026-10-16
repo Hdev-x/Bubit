@@ -7,7 +7,7 @@
 - PostgreSQL
 - Python 3 (`npm run check:css`에서 사용)
 
-이 공개 Beta에는 자동매매·Backtest·Push·Admin·내부 워커 코드와 `trading` profile이 없습니다. 수동 모의투자는 별도 `paper` profile에서 활성화합니다. API는 실제 거래소 주문을 실행하지 않으며, 외부 서비스에 배포하는 절차도 이 문서에 포함하지 않습니다.
+이 공개 소스에는 자동매매·Backtest·Push·Admin·내부 워커 코드와 `trading` profile이 없습니다. 수동 모의투자는 별도 `paper` profile에서 활성화합니다. API는 실제 거래소 주문을 실행하지 않으며, 외부 서비스에 배포하는 절차도 이 문서에 포함하지 않습니다.
 
 ## 첫 검증
 
@@ -22,7 +22,7 @@ npm run check:css
 
 cd ../api
 ./gradlew test --no-daemon
-./gradlew bootWar -x test
+./gradlew bootJar -x test
 ```
 
 API test는 H2 in-memory DB와 테스트 전용 더미 값을 사용합니다. PostgreSQL이나 실제 credential은 필요하지 않습니다.

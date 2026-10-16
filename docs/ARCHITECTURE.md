@@ -1,5 +1,19 @@
 # 구조와 데이터 흐름
 
+## 구성
+
+```mermaid
+flowchart LR
+    Web[React · PC / Mobile] -->|REST · JWT| API[Spring Boot · 실행형 JAR]
+    API -->|MyBatis| DB[(PostgreSQL)]
+    API -->|서명된 조회 요청| Account[Bitget 계좌 API]
+    Exchange[거래소 공개 REST / WebSocket] -->|시세 · 캔들| API
+    Exchange -->|일부 공개 데이터| Web
+    API -->|STOMP / WebSocket| Web
+```
+
+운영 빌드·배포는 비공개 개발 저장소에서 관리합니다. 이 공개본은 앱 구조와 로컬 실행을 살펴보기 위한 선별 소스입니다.
+
 ## 폴더 경계
 
 - `apps/web/src/app/{desktop,mobile}`: 화면 배치·탭·패널과 앱 진입점
@@ -12,7 +26,7 @@
 - `apps/api/src/main/java/com/bubit`: `member` 인증·프로필·API 키 관리, `community` 게시글·댓글, `market/coin` 시세 중계, `trade` 계좌 조회·수동 모의투자, `common` 보안·이미지 처리·공통 설정
 
 화면에서 차트·훅을 호출하고, 훅이 API와 공용 계산을 사용합니다. 루트 `shared`는 앱 화면을 참조하지 않습니다.
-공개본은 Beta 기능에 필요한 소스만 포함하며 비활성 봇 서버와 부팅 시 자동 DDL 실행 코드는 포함하지 않습니다.
+공개본은 서비스의 선별 소스를 포함하며 비활성 봇 서버와 부팅 시 자동 DDL 실행 코드는 포함하지 않습니다.
 
 ## 시세가 화면에 도착하는 과정
 
