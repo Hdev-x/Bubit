@@ -1,7 +1,9 @@
 import importlib.util
+import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 
 spec = importlib.util.spec_from_file_location('css_cascade', Path(__file__).with_name('check-css-cascade-order.py'))
@@ -10,6 +12,27 @@ spec.loader.exec_module(cascade)
 
 
 class BundleOrderTest(unittest.TestCase):
+    def test_origin_snapshot_detects_reversed_rules_without_git_history(self):
+        first = ('.same', 'color:white')
+        second = ('.same', 'color:black')
+        snapshot = {
+            'schema': 1,
+            'fingerprint': 'sha256(selector+NUL+body)',
+            'apps': {'desktop': {
+                cascade.rule_fingerprint(*first): 0,
+                cascade.rule_fingerprint(*second): 1,
+            }},
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Path(directory) / 'origin.json'
+            fixture.write_text(json.dumps(snapshot), encoding='utf-8')
+            with patch.object(cascade, 'ORIGIN_SNAPSHOT', fixture):
+                config = {'app': 'desktop', 'shell': 'desktop.css'}
+                self.assertEqual(cascade.check_origin_order(config, [first, second], []), [])
+                problems = cascade.check_origin_order(config, [second, first], [])
+                self.assertEqual(len(problems), 1)
+                self.assertIn('REVERSED', problems[0])
+
     def test_html_stylesheets_precede_lazy_chunks_and_reversed_order_still_fails(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -1,17 +1,17 @@
-"""CSS cascade 순서 검사.
+"""CSS cascade 순서 검사 (wp-04 CSS 분할 회귀 방지, 리뷰 P0 재발 방지).
 
 다섯 가지를 검사한다.
- 1. 분할 전 CSS 규칙 순서 snapshot 대비 — 같은 단순선택자·같은 속성을 다투는 규칙 쌍에서 기준과 순서가
+ 1. 분할 전 CSS snapshot(원본 f31cc27) 규칙 순서 대비 — 같은 단순선택자·같은 속성을 다투는 규칙 쌍에서 원본과 순서가
     뒤집힌 것이 없는지. 셸(styles/*.css)↔컴포넌트 옆 CSS 쌍과 같은 파일 안의 쌍을 본다. 컴포넌트 파일끼리 겹치는
     단순선택자도 잡는다(파일 사이 순서는 import 순서에 달려 보장할 수 없으므로).
  2. 진입점(main.tsx) import 순서 — 셸 CSS import가 컴포넌트를 끌어오는 첫 import보다 앞에 있는지(`import type`은 제외).
-    셸 CSS가 컴포넌트 CSS 뒤에 번들돼 테마·flex 규칙을 덮는 회귀를 막는다.
+    (2026-09-05 P0 원인: 셸 CSS가 컴포넌트 CSS 뒤에 번들돼 테마·flex 규칙이 덮였다.)
  3. 빌드 산출물(dist/, dist-desktop/)이 있으면 번들 CSS에서 셸 규칙이 모든 컴포넌트 CSS 파일보다 앞에 있는지.
- 5. 두 앱 셸(mobile.css·desktop.css)에 같은 클래스 선택자가 없는지 — 양 앱 공용 규칙은 shared/ui·chart/ 한 곳에,
+ 5. 두 앱 셸(mobile.css·desktop.css)에 같은 클래스 선택자가 없는지 — wp-11 d02(D-20260908-01): 양 앱 공용 규칙은 shared/ui·chart/ 한 곳에,
     앱별 값 차이는 CSS 변수로. `:root`·`*`·`body` 같은 element·전역 선택자는 앱별 셸 루트라 비교하지 않는다(이름 예외 목록은 없다).
-    선택자만 비교하고 media 조건은 무시한다(표기 차이·기본 vs media 내부 중복 방지).
- 4. 번들에서 회귀 대상 선택자의 최종 선언이 기대값인지(.coin-chart-page 배경·색·하단 여백은 전용 규칙이며 값이 CoinChartPage.css와 같음, .show-current-label은 flex),
-    .chart-tool-strip의 media 조건(<=410px·>=860px, 방향·값 정확 비교)이 남아 있는지.
+    선택자만 비교하고 media 조건은 무시한다(리뷰 P1: 표기 차이·기본 vs media 내부 중복).
+ 4. 번들에서 과거 P0 선택자의 최종 선언이 기대값인지(.coin-chart-page 배경·색·하단 여백은 전용 규칙이며 값이 CoinChartPage.css와 같음, .show-current-label은 flex),
+    .chart-tool-strip의 media 조건(<=410px·>=860px, 방향·값 정확 비교)이 남아 있는지 — 3차 리뷰 P2: 위치 비교만으로는 같은 파일 안 재배치·값 변경을 못 잡았다.
 
 실행: apps/web에서 `npm run check:css` (빌드 뒤에 돌리면 3·4번까지 검사). 문제가 있으면 exit 1.
 """
@@ -30,12 +30,12 @@ APPS = [
     dict(app='mobile', shell='src/app/mobile/styles/mobile.css', comp_globs=['src/app/mobile/**/*.css', 'src/chart/**/*.css', 'src/shared/**/*.css'],
          entry='src/app/mobile/main.tsx', dist='dist', html='index.html',
          # (선택자, 속성, 기대값). 'SOURCE:<파일>'은 그 파일의 단독 선택자 규칙에 적힌 값이 번들 최종값이어야 한다는 뜻
-         # 단독 선택자인지만 보면 값이 바뀐 회귀를 통과시키므로 값도 비교한다.
+         # (5차 리뷰 P2: 단독 선택자인지만 보면 값이 바뀐 회귀를 통과시킨다).
          final=[('.coin-chart-page', 'background', 'SOURCE:src/app/mobile/pages/CoinChartPage.css'),
                 ('.coin-chart-page', 'color', 'SOURCE:src/app/mobile/pages/CoinChartPage.css'),
                 ('.coin-chart-page', 'padding-bottom', 'SOURCE:src/app/mobile/pages/CoinChartPage.css'),
                 ('.show-current-label', 'display', 'flex')],
-         # (선택자, media 조건) — 조건은 '<=410px' 형태로 정규화해 정확히 비교한다.
+         # (선택자, media 조건) — 조건은 '<=410px' 형태로 정규화해 정확히 비교한다(4차 리뷰 P2: 부분 문자열 비교는 1860px도 통과시켰다)
          media=[('.chart-tool-strip', '<=410px'), ('.chart-tool-strip', '>=860px')]),
     dict(app='desktop', shell='src/app/desktop/styles/desktop.css', comp_globs=['src/app/desktop/**/*.css', 'src/chart/**/*.css', 'src/shared/**/*.css'],
          entry='src/app/desktop/main.tsx', dist='dist-desktop', html='desktop.html',
@@ -75,7 +75,7 @@ def rules(css):
 
 
 def simple(sel):
-    """콤마 목록을 단순 선택자로 나눈다 — :is(.a, .b)·:not(...) 안의 콤마는 나누지 않는다."""
+    """콤마 목록을 단순 선택자로 나눈다 — :is(.a, .b)·:not(...) 안의 콤마는 나누지 않는다(최상위 콤마만, wp-11 리뷰 P2)."""
     out, cur, depth = [], '', 0
     for ch in sel:
         if ch in '([':
@@ -92,7 +92,7 @@ def simple(sel):
 
 
 def class_tokens(sel):
-    """선택자의 실제 class token — attribute 값·문자열 안의 점(a[href="v1.0"])은 제외한다."""
+    """선택자의 실제 class token — attribute 값·문자열 안의 점(a[href="v1.0"])은 제외(wp-11 리뷰 P2)."""
     s = re.sub(r'\[[^\]]*\]', '', sel)
     s = re.sub(r'"[^"]*"|\'[^\']*\'', '', s)
     return set(re.findall(r'\.([A-Za-z_-][\w-]*)', s))
@@ -312,7 +312,7 @@ def check_bundle_final(cfg, bundle):
 
 def check_shell_duplicates():
     """[5] 두 셸의 공통 클래스 선택자 0 — 최상위 콤마로 나눈 단순 선택자 중 class token이 있는 것만 비교(element·전역 선택자 제외).
-    media 조건은 비교 키에 넣지 않는다(표기 차이·기본 규칙 vs media 내부 중복을 놓치지 않도록). 보고에는 media를 함께 적는다."""
+    media 조건은 비교 키에 넣지 않는다(표기 차이·기본 규칙 vs media 내부 중복을 놓치지 않도록, wp-11 리뷰 P1). 보고에는 media를 함께 적는다."""
     maps = []
     for cfg in APPS:
         rs = rules(open(cfg['shell'], encoding='utf-8').read())

@@ -20,7 +20,7 @@
   <a href="https://github.com/Hdev-x/Bubit/actions/workflows/ci.yml"><img src="https://github.com/Hdev-x/Bubit/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
 </p>
 
-> **Beta** · [Bubit 열기](https://bubit.ddnsfree.com) · 아래 가이드로 로컬에서도 실행할 수 있습니다.
+> [Bubit 열기](https://bubit.ddnsfree.com) · 공개 포트폴리오 소스와 로컬 실행 예제입니다. 개발·운영 배포는 비공개 개발 저장소에서 관리하며, 이 저장소의 갱신은 서버 배포와 독립적입니다.
 
 ## 화면 미리보기
 
@@ -30,7 +30,7 @@
   <img src="docs/images/desktop-chart.png" alt="Bubit PC의 Bitget BTC 차트 화면" width="960" />
 </p>
 
-이전 버전 미리보기의 Community는 샘플 UI입니다. 현재 버전은 종목 이야기·자유게시판과 댓글·좋아요·사진 첨부를 지원합니다.
+이전 버전 미리보기의 Community는 샘플 UI입니다. 현재 버전은 전체 실시간 채팅과 댓글·좋아요·사진 첨부를 지원합니다.
 
 <table>
   <tr>
