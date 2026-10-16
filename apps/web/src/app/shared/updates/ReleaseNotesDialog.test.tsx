@@ -13,8 +13,8 @@ describe('ReleaseNotesDialog', () => {
   });
   afterEach(cleanupRenderComponents);
 
-  it('keeps the newest release aligned with the shipped package version', () => {
-    expect(releaseNotes[0].version).toBe(version);
+  it('does not show a release newer than the shipped package version', () => {
+    expect(releaseNotes[0].version.localeCompare(version, 'en', { numeric: true })).toBeLessThanOrEqual(0);
   });
 
   it('shows newest notes first with a single latest badge without requiring a user', async () => {

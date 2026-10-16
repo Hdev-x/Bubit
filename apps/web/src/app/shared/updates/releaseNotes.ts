@@ -9,9 +9,9 @@ export const releaseNotes: readonly ReleaseNote[] = [
   {
     version: '0.2.1',
     date: '2026-10-16',
-    title: '업데이트 내역 문구 정리',
+    title: '업데이트 내역 가독성 개선',
     changes: [
-      '업데이트 내역을 간결한 항목형 표현으로 통일',
+      '버전별 주요 변경 사항을 더 쉽게 확인할 수 있도록 안내 개선',
     ],
   },
   {
