@@ -20,7 +20,6 @@ export function Sidebar({ sidebarOpen, section, sectionLocked, krw, setKrw, mark
     orderOpen: boolean;
     onToggle: () => void;
     onToggleOrder: () => void;
-    onOpenSettings: () => void;
     content: ReactNode;
   };
 }) {
@@ -37,15 +36,6 @@ export function Sidebar({ sidebarOpen, section, sectionLocked, krw, setKrw, mark
           <div className="sidebar-header">
             <span className="sidebar-title-wrap">
               {SECTIONS.find((s) => s.id === section)?.title}
-              {section === 'invest' && <>
-                <button type="button" className={`paper-toggle${paper.enabled ? ' on' : ''}`} aria-pressed={paper.enabled}
-                  onClick={paper.onToggle} title={paper.enabled ? '실제 투자로 전환' : '모의투자로 전환'}>모의투자</button>
-                {paper.enabled && <>
-                  <button type="button" className={`paper-order-open${paper.orderOpen ? ' on' : ''}`} aria-pressed={paper.orderOpen}
-                    onClick={paper.onToggleOrder} title="모의 주문창">주문</button>
-                  <button type="button" className="paper-reset-btn" onClick={paper.onOpenSettings} title="모의계좌 초기화 설정">초기화</button>
-                </>}
-              </>}
             </span>
             {/* 원화/USD 전환은 내 잔고에만 적용되므로 내투자 섹션에서만 노출 */}
             {section === 'invest' && (
@@ -59,8 +49,18 @@ export function Sidebar({ sidebarOpen, section, sectionLocked, krw, setKrw, mark
             )}
           </div>
 
+          {section === 'invest' && <div className="sidebar-invest-controls">
+            <button type="button" className={`paper-toggle${paper.enabled ? ' on' : ''}`} aria-pressed={paper.enabled}
+              onClick={paper.onToggle} title={paper.enabled ? '실제 투자로 전환' : '모의투자로 전환'}>모의투자</button>
+            {paper.enabled && <button type="button" className={`paper-order-open${paper.orderOpen ? ' on' : ''}`} aria-pressed={paper.orderOpen}
+              onClick={paper.onToggleOrder} title="모의 주문창">주문</button>}
+          </div>}
+
           {/* 내 투자 */}
-          {section === 'invest' && (paper.enabled ? paper.content : <InvestSection {...invest} />)}
+          {section === 'invest' && <div className="sidebar-invest-view" hidden={paper.enabled}>
+            <InvestSection {...invest} />
+          </div>}
+          {paper.content}
 
           {section === 'market' && (
             <div className="sidebar-section web-market">

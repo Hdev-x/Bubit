@@ -10,8 +10,8 @@ vi.mock('../../api/server/paperApi', () => ({ fetchPaperAccount: api.fetch, plac
 const account = (balance: number): PaperAccount => ({ balance, peakEquity: 10000, positions: [], orders: [] });
 const deferred = <T,>() => { let resolve!: (value: T) => void; const promise = new Promise<T>((done) => { resolve = done; }); return { promise, resolve }; };
 let paper: ReturnType<typeof usePaperTrade>;
-function Harness() {
-  const result = usePaperTrade();
+function Harness({ active = true }: { active?: boolean }) {
+  const result = usePaperTrade(active);
   useEffect(() => { paper = result; });
   return <div>{result.ready ? result.account.balance : 'loading'}</div>;
 }
@@ -39,4 +39,36 @@ it('조회실패를 잔고0의 정상계좌로 숨기지 않는다', async () =>
   await renderComponent(<Harness />);
   expect(paper.ready).toBe(false);
   expect(paper.error).toContain('불러오지 못했습니다');
+});
+
+it('숨겨진 계좌는 조회를 멈추고 다시 열어도 기존 잔고를 유지한다', async () => {
+  api.fetch.mockResolvedValueOnce(account(10000));
+  const view = await renderComponent(<Harness active={false} />);
+  expect(api.fetch).not.toHaveBeenCalled();
+  await view.rerender(<Harness />);
+  expect(view.container.textContent).toBe('10000');
+  const stale = deferred<PaperAccount>();
+  api.fetch.mockReturnValueOnce(stale.promise);
+  act(() => { void paper.refetch(); });
+  await view.rerender(<Harness active={false} />);
+  await act(async () => { stale.resolve(account(5000)); });
+  expect(view.container.textContent).toBe('10000');
+  const refresh = deferred<PaperAccount>();
+  api.fetch.mockReturnValueOnce(refresh.promise);
+  await view.rerender(<Harness />);
+  expect(view.container.textContent).toBe('10000');
+  await act(async () => { refresh.resolve(account(9000)); });
+  expect(view.container.textContent).toBe('9000');
+});
+
+it('계좌를 숨기는 도중 완료된 주문 결과는 보존한다', async () => {
+  api.fetch.mockResolvedValueOnce(account(10000));
+  const view = await renderComponent(<Harness />);
+  const order = deferred<PaperAccount>();
+  api.place.mockReturnValueOnce(order.promise);
+  act(() => { void paper.place({ type: 'market', direction: 'long', symbol: 'BTCUSDT', price: 100, leverage: 5, marginUsdt: 100 }); });
+  await view.rerender(<Harness active={false} />);
+  await act(async () => { order.resolve(account(9900)); });
+  expect(view.container.textContent).toBe('9900');
+  expect(paper.busy).toBe(false);
 });

@@ -10,7 +10,7 @@ import { cleanupRenderComponents, renderComponent } from '../../test/renderCompo
 import DesktopApp from './DesktopApp';
 
 const controls = vi.hoisted(() => ({
-  candlesKey: 'BINANCE|F|BTCUSDT|1h', decimals: 2, chartMounts: 0,
+  candlesKey: 'BINANCE|F|BTCUSDT|1h', decimals: 2, chartMounts: 0, paperMounts: 0,
   candleStatus: 'ready' as 'loading' | 'ready' | 'error', mtfStatus: 'settled' as 'loading' | 'settled',
   priceStatus: 'ready' as 'loading' | 'ready' | 'error', primaryReady: true, candleClose: 1, missing: [] as string[],
   candles: [{ time: 1, open: 1, high: 1, low: 1, close: 1, volume: 1 }], mtf: {},
@@ -35,19 +35,22 @@ vi.mock('../../chart/hooks/useMtfCandles', () => ({ useMtfCandles: (_symbol: str
 vi.mock('./hooks/useDrawingState', () => ({ useDrawingState: () => ({ drawOpen: false, setDrawOpen: vi.fn(), drawRef: { current: null } }) }));
 vi.mock('./hooks/useIndicatorState', () => ({ useIndicatorState: () => ({ indiOpen: false, setIndiOpen: vi.fn(), indiRef: { current: null }, effIndicatorSettings: { '1M': {}, '1W': {}, '3D': {}, '1D': {} } }) }));
 vi.mock('./hooks/useChartViewState', () => ({ useChartViewState: () => { const [activeTf, setActiveTf] = useState('1H'); return { activeTf, setActiveTf, chartSetOpen: false, setChartSetOpen: vi.fn(), chartSetRef: { current: null } }; } }));
-vi.mock('./panels/DesktopHeader', () => ({ DesktopHeader: ({ setWatchMode, children }: { setWatchMode: (mode: 'hidden' | 'dock') => void; children: ReactNode }) => <>{children}<button onClick={() => setWatchMode('dock')}>dock</button><button onClick={() => setWatchMode('hidden')}>hide</button></> }));
+vi.mock('./panels/DesktopHeader', () => ({ DesktopHeader: ({ setWatchMode, children, onProfileClick }: { onProfileClick: () => void; setWatchMode: (mode: 'hidden' | 'dock') => void; children: ReactNode }) => <>{children}<button onClick={onProfileClick}>open-settings</button><button onClick={() => setWatchMode('dock')}>dock</button><button onClick={() => setWatchMode('hidden')}>hide</button></> }));
 vi.mock('./panels/WatchlistPanel', () => ({ WatchlistPanel: ({ mode, onSelect }: { mode: string; onSelect: (symbol: string, market: string, exchange: string) => void }) => <div data-testid={`watch-${mode}`}><button onClick={() => onSelect('BTCUSDT', 'spot', 'BITGET')}>same-symbol</button><button onClick={() => onSelect('ETHUSDT', 'spot', 'BITGET')}>other-symbol</button></div> }));
 vi.mock('./panels/ChartToolbar', () => ({ ChartToolbar: ({ solo, view, interactionBlocked }: { solo: { soloOn: boolean; setFocusTracker: (tracker: TrackerState) => void; setSoloActive: (active: boolean) => void }; view: { setActiveTf: (tf: string) => void }; interactionBlocked?: boolean }) => <><output data-testid="solo">{String(solo.soloOn)}</output><output data-testid="toolbar-blocked">{String(interactionBlocked)}</output><button onClick={() => { solo.setFocusTracker({ symbol: 'BTCUSDT', xabc: { X: { time: 1 } } } as TrackerState); solo.setSoloActive(true); }}>solo-on</button><button onClick={() => view.setActiveTf('4H')}>change-tf</button></> }));
 vi.mock('./panels/ChartStage', () => ({ ChartStage: ({ chartRef, data, sel }: { chartRef: RefObject<MarketChartRef | null>; data: { chartTickDecimals: number; candles: Array<{ close: number }>; pending: boolean; error: boolean; missing: string[]; onRetry: () => void; handleVisibleRangeChange: () => void }; sel: { symbol: string } }) => { useEffect(() => { controls.chartMounts += 1; (chartRef as { current: MarketChartRef | null }).current = { resetPriceAutoScale: controls.resetPriceAutoScale, focusTimeWindow: controls.focusTimeWindow, getVisibleRawTimeRange: () => ({ from: 1, to: 2 }) } as unknown as MarketChartRef; return () => { (chartRef as { current: MarketChartRef | null }).current = null; }; }, [chartRef]); return <><output data-testid="decimals">{data.chartTickDecimals}</output><output data-testid="shown">{`${sel.symbol}|${data.candles[0]?.close}|${data.pending}|${data.error}|${data.missing.join(',')}`}</output><button onClick={data.onRetry}>retry-chart</button><button onClick={data.handleVisibleRangeChange}>load-history</button></>; } }));
 vi.mock('./panels/SymbolHeader', () => ({ SymbolHeader: () => null }));
 vi.mock('./panels/OrderbookPanel', () => ({ OrderbookPanel: () => <div data-testid="orderbook" /> }));
 vi.mock('../shared/community/CommunityPanel', () => ({ CommunityPanel: () => <div data-testid="community" /> }));
-vi.mock('./panels/PaperInvestSection', () => ({ PaperInvestSection: ({ orderOpen, onCloseOrder }: { orderOpen: boolean; onCloseOrder: () => void }) => <div data-testid="paper-invest">{orderOpen && <div data-testid="paper-order"><button onClick={onCloseOrder}>close-paper-order</button></div>}</div> }));
+vi.mock('./panels/PaperInvestSection', () => ({ PaperInvestSection: ({ orderOpen, onCloseOrder, active, visible }: { orderOpen: boolean; onCloseOrder: () => void; active: boolean; visible: boolean }) => {
+  useEffect(() => { controls.paperMounts += 1; }, []);
+  return <div data-testid="paper-invest" hidden={!visible} data-active={active}>{visible && orderOpen && <div data-testid="paper-order"><button onClick={onCloseOrder}>close-paper-order</button></div>}</div>;
+} }));
 vi.mock('../shared/account/MyPageDialog', () => ({ default: ({ initialSection, onClose }: { initialSection: string; onClose: () => void }) => <div data-testid="settings-dialog" data-section={initialSection}><button onClick={onClose}>close-settings</button></div> }));
 vi.mock('./panels/OrderbookCompanion', () => ({ OrderbookCompanion: () => <div data-testid="companion" /> }));
 vi.mock('./panels/InvestSection', () => ({ InvestSection: () => <div data-testid="real-invest" /> }));
 vi.mock('./panels/MarketPanel', () => ({ MarketPanel: () => null }));
-vi.mock('./panels/IconRail', () => ({ IconRail: () => null }));
+vi.mock('./panels/IconRail', () => ({ IconRail: ({ openSection }: { openSection: (section: 'market' | 'invest') => void }) => <><button onClick={() => openSection('market')}>실시간</button><button onClick={() => openSection('invest')}>내 투자</button></> }));
 
 const user: AuthUser = { username: 'tester', role: 'USER' };
 const props = { user, onLoginClick: vi.fn(), onLogout: vi.fn(), onUserChange: vi.fn() };
@@ -61,7 +64,7 @@ const flushRaf = async () => act(async () => {
 
 describe('DesktopApp chart state', () => {
   beforeEach(() => {
-    vi.useFakeTimers(); controls.candlesKey = 'BINANCE|F|BTCUSDT|1h'; controls.decimals = 2; controls.candleClose = 1; controls.candles = [{ time: 1, open: 1, high: 1, low: 1, close: 1, volume: 1 }]; controls.candleStatus = 'ready'; controls.mtfStatus = 'settled'; controls.priceStatus = 'ready'; controls.primaryReady = true; controls.missing = []; controls.chartMounts = 0; controls.rangeChange.mockReset(); controls.retryCandles.mockReset(); controls.retryMtf.mockReset(); controls.focusTimeWindow.mockReset(); controls.resetPriceAutoScale.mockReset(); controls.raf.clear(); controls.nextRaf = 1;
+    vi.useFakeTimers(); controls.candlesKey = 'BINANCE|F|BTCUSDT|1h'; controls.decimals = 2; controls.candleClose = 1; controls.candles = [{ time: 1, open: 1, high: 1, low: 1, close: 1, volume: 1 }]; controls.candleStatus = 'ready'; controls.mtfStatus = 'settled'; controls.priceStatus = 'ready'; controls.primaryReady = true; controls.missing = []; controls.chartMounts = 0; controls.paperMounts = 0; controls.rangeChange.mockReset(); controls.retryCandles.mockReset(); controls.retryMtf.mockReset(); controls.focusTimeWindow.mockReset(); controls.resetPriceAutoScale.mockReset(); controls.raf.clear(); controls.nextRaf = 1;
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { const id = controls.nextRaf++; controls.raf.set(id, callback); return id; });
     vi.stubGlobal('cancelAnimationFrame', (id: number) => controls.raf.delete(id));
   });
@@ -89,28 +92,39 @@ describe('DesktopApp chart state', () => {
     expect(controls.mainActive).toBe(false);
   });
 
-  it('내 투자 캡슐로 모의계좌를 전환하고 실제계좌 조회를 멈춘다', async () => {
+  it('모의투자·주문 닫힘으로 시작하고 설정·다른 섹션을 다녀와도 선택과 화면을 보존한다', async () => {
     const view = await renderComponent(<DesktopApp {...props} />);
     await flushRaf(); await flushRaf();
-    expect(view.container.querySelector('[data-testid="real-invest"]')).not.toBeNull();
-    expect(controls.mainActive).toBe(true);
-    await click(view.container, '모의투자');
-    expect(view.container.querySelector('.paper-toggle.on')).not.toBeNull();
-    expect(view.container.querySelector('[data-testid="real-invest"]')).toBeNull();
-    expect(view.container.querySelector('[data-testid="paper-invest"]')).not.toBeNull();
+    const paper = view.container.querySelector('[data-testid="paper-invest"]');
+    expect(view.container.querySelector('.sidebar-invest-controls .paper-toggle.on')).not.toBeNull();
+    expect(paper?.hasAttribute('hidden')).toBe(false);
     expect(controls.mainActive).toBe(false);
+    expect(view.container.querySelector('[data-testid="paper-order"]')).toBeNull();
+    expect(view.container.querySelector('.paper-reset-btn')).toBeNull();
     await click(view.container, '주문');
     expect(view.container.querySelector('[data-testid="paper-order"]')).not.toBeNull();
-    await click(view.container, 'close-paper-order');
+    await click(view.container, '실시간');
+    expect(paper?.hasAttribute('hidden')).toBe(true);
     expect(view.container.querySelector('[data-testid="paper-order"]')).toBeNull();
-    await click(view.container, '초기화');
-    expect(view.container.querySelector('[data-testid="paper-invest"]')).toBeNull();
-    expect(view.container.querySelector('[data-testid="settings-dialog"]')?.getAttribute('data-section')).toBe('paper');
+    await click(view.container, '내 투자');
+    expect(view.container.querySelector('[data-testid="paper-invest"]')).toBe(paper);
+    expect(view.container.querySelector('[data-testid="paper-order"]')).not.toBeNull();
+    await click(view.container, 'close-paper-order');
+    await click(view.container, 'open-settings');
+    expect(view.container.querySelector('[data-testid="paper-invest"]')).toBe(paper);
+    expect(paper?.getAttribute('data-active')).toBe('false');
+    expect(view.container.querySelector('[data-testid="settings-dialog"]')?.getAttribute('data-section')).toBe('profile');
     await click(view.container, 'close-settings');
-    expect(view.container.querySelector('[data-testid="paper-invest"]')).not.toBeNull();
+    expect(paper?.getAttribute('data-active')).toBe('true');
     await click(view.container, '모의투자');
-    expect(view.container.querySelector('[data-testid="real-invest"]')).not.toBeNull();
+    expect(paper?.hasAttribute('hidden')).toBe(true);
     expect(controls.mainActive).toBe(true);
+    await click(view.container, '실시간');
+    await click(view.container, '내 투자');
+    expect(view.container.querySelector('.paper-toggle.on')).toBeNull();
+    expect(view.container.querySelector('[data-testid="real-invest"]')?.closest('[hidden]')).toBeNull();
+    expect(controls.mainActive).toBe(true);
+    expect(controls.paperMounts).toBe(1);
     expect(controls.chartMounts).toBe(1);
   });
 

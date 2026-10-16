@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import { useEffect, useLayoutEffect, useId, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import type { AuthUser } from '../../../api/server/authApi';
 import { updateProfile, uploadAvatar } from '../../../api/server/profileApi';
 import { errorMessage } from '../../../shared/utils/guards';
@@ -34,7 +34,7 @@ export default function MyPageDialog({ user, onClose, onUserChange, initialSecti
   const sectionId = useId();
   const activeSection = sections.find(item => item.id === section)!;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     mounted.current = true;
     const element = dialog.current;
     element?.showModal();

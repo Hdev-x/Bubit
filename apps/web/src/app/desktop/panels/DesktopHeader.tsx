@@ -27,10 +27,10 @@ export function DesktopHeader({ user, onLoginClick, onLogout, onProfileClick, ch
             </div>
             <div className="header-right">
               {children}
-              <div className="header-search">
+              {/* <div className="header-search">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" /></svg>
                 <input placeholder="검색" />
-              </div>
+              </div> */}
               {user && (
                 <button
                   className={`header-watch-btn${effWatchMode !== 'hidden' ? ' active' : ''}`}

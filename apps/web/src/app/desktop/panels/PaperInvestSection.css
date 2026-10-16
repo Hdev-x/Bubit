@@ -25,3 +25,5 @@
 .paper-invest-float-head button:disabled { opacity: .4; cursor: default; }
 .paper-invest-float-body { overflow-y: auto; min-height: 0; padding: 8px 12px 18px; }
 .paper-invest button:focus-visible, .paper-invest-float button:focus-visible { outline: 2px solid #7eafff; outline-offset: 2px; }
+
+.paper-invest[hidden] { display: none; }

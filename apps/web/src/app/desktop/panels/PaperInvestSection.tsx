@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { AuthUser } from '../../../api/server/authApi';
 import { usePaperTrade } from '../../../hooks/account/usePaperTrade';
+import { useLivePrice } from '../../../hooks/market/useLivePrice';
 import { useRealtimePrices } from '../../../hooks/market/useRealtimePrices';
 import { PaperOrderTicket } from '../../shared/paper/PaperOrderTicket';
 import type { DesktopExchange } from '../hooks/useDesktopCandles';
@@ -22,6 +23,8 @@ type Props = {
   krw: boolean;
   usdKrw: number;
   orderOpen: boolean;
+  active?: boolean;
+  visible?: boolean;
   onCloseOrder: () => void;
   onSelectChart: (symbol: string, market: string, exchange: string) => void;
 };
@@ -31,8 +34,8 @@ export function PaperInvestSection(props: Props) {
 }
 
 /** AutoTrade 6708f771 WebApp의 내투자 화면에 수동 모의계좌를 연결한다. */
-function PaperAccountInvest({ symbol, exchange, isFutures, price, krw, usdKrw, orderOpen, onCloseOrder, onSelectChart }: Props) {
-  const paper = usePaperTrade();
+function PaperAccountInvest({ symbol, krw, usdKrw, orderOpen, active = true, visible = true, onCloseOrder, onSelectChart }: Props) {
+  const paper = usePaperTrade(active);
   const [investTab, setInvestTab] = useState<InvestTab>('선물');
   const [portfolioOn, setPortfolioOn] = useState(true);
   const [positionsOn, setPositionsOn] = useState(true);
@@ -40,10 +43,18 @@ function PaperAccountInvest({ symbol, exchange, isFutures, price, krw, usdKrw, o
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [detailTab, setDetailTab] = useState<'positions' | 'orders'>('positions');
   const [showCurrent, setShowCurrent] = useState(false);
-  const realtime = useRealtimePrices([...new Set(paper.account.positions.map((position) => position.symbol))], true);
-  const supported = exchange === 'BITGET' && isFutures && /^[A-Z0-9]+USDT$/.test(symbol);
+  const chartOrderSymbol = /^[A-Z0-9]+USDT$/.test(symbol) ? symbol : null;
+  const [lastOrderSymbol, setLastOrderSymbol] = useState(chartOrderSymbol ?? 'BTCUSDT');
+  if (chartOrderSymbol && chartOrderSymbol !== lastOrderSymbol) setLastOrderSymbol(chartOrderSymbol);
+  const orderSymbol = chartOrderSymbol ?? lastOrderSymbol;
+  const quoteEnabled = active && (orderOpen || paper.account.positions.some((position) => position.symbol === orderSymbol));
+  const quote = useLivePrice({ symbol: orderSymbol, exchange: 'BITGET', isFutures: true, enabled: quoteEnabled });
+  // 차트 거래소와 무관하게 Bitget의 해당 종목 가격이 준비된 뒤에만 주문한다.
+  const orderPrice = quoteEnabled && quote.ready && quote.readySymbol === orderSymbol
+    && quote.price !== null && Number.isFinite(quote.price) && quote.price > 0 ? quote.price : null;
+  const realtime = useRealtimePrices([...new Set(paper.account.positions.map((position) => position.symbol))], true, active);
   const positions: ValuedPaperPosition[] = paper.account.positions.map((position) => {
-    const current = realtime[position.symbol] ?? (supported && position.symbol === symbol ? price : null);
+    const current = (position.symbol === orderSymbol ? orderPrice : null) ?? realtime[position.symbol] ?? null;
     const markPrice = current !== null && Number.isFinite(current) && current > 0 ? current : null;
     const pnl = markPrice === null ? null : (markPrice - position.entryPrice) * position.size * (position.direction === 'long' ? 1 : -1);
     return { ...position, markPrice, pnl, roe: pnl === null || position.margin <= 0 ? null : pnl / position.margin * 100 };
@@ -62,7 +73,7 @@ function PaperAccountInvest({ symbol, exchange, isFutures, price, krw, usdKrw, o
   const select = (position: ValuedPaperPosition) => { setSelectedId(position.id); onSelectChart(position.symbol, 'futures', 'BITGET'); };
 
   return <>
-    <div className={`sidebar-section paper-invest${portfolioOn && positionsOn ? ' both-on' : ''}`} id="sidebar-invest">
+    <div className={`sidebar-section paper-invest${portfolioOn && positionsOn ? ' both-on' : ''}`} id="paper-invest" hidden={!visible}>
       <div className="invest-tabs">{INVEST_TABS.map((tab) => <button key={tab} type="button" className={`invest-tab${investTab === tab ? ' active' : ''}`} onClick={() => setInvestTab(tab)}>{tab}</button>)}</div>
       <div className="view-filters">
         <button type="button" className={`view-chip${portfolioOn ? ' on' : ''}`} aria-pressed={portfolioOn} onClick={() => { if (!portfolioOn || positionsOn) setPortfolioOn(!portfolioOn); }}>포트폴리오</button>
@@ -110,9 +121,15 @@ function PaperAccountInvest({ symbol, exchange, isFutures, price, krw, usdKrw, o
       </div>}
       <div className="tas-notice">모의투자 · 실제 자산과 별도로 관리됩니다</div>
     </div>
-    {orderOpen && <PaperOrderFloat busy={paper.busy} onClose={onCloseOrder}>
+    {visible && orderOpen && <PaperOrderFloat busy={paper.busy} onClose={onCloseOrder}>
       {paper.error && <p role="alert" className="paper-error">{paper.error}</p>}
-      {!paper.ready ? <p className="paper-muted">모의계좌를 불러오는 중…</p> : supported ? <PaperOrderTicket key={symbol} symbol={symbol} price={price} balance={paper.account.balance} positions={paper.account.positions} busy={paper.busy} onPlace={paper.place} onClose={paper.close} /> : <p className="paper-muted">Bitget USDT 선물 종목을 선택하면 모의 주문을 할 수 있습니다.</p>}
+      {!chartOrderSymbol && <p className="paper-muted">현재 차트는 USDT 종목이 아니므로 {orderSymbol} Bitget 선물 주문을 유지합니다.</p>}
+      {!paper.ready ? <p className="paper-muted">모의계좌를 불러오는 중…</p> : <>
+        {orderPrice === null && <p role="status" className="paper-muted">{quote.status === 'error' ? 'Bitget 시세를 확인하지 못했습니다. 지원 종목인지 확인해 주세요.' : 'Bitget 선물 시세를 기다리는 중입니다.'}</p>}
+        <PaperOrderTicket key={orderSymbol} symbol={orderSymbol} price={orderPrice} balance={paper.account.balance}
+          positions={paper.account.positions} busy={paper.busy || orderPrice === null}
+          onPlace={(order) => orderPrice !== null && order.symbol === orderSymbol ? paper.place(order) : Promise.resolve(false)} onClose={paper.close} />
+      </>}
     </PaperOrderFloat>}
   </>;
 }

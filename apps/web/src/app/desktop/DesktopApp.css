@@ -434,7 +434,6 @@
 }
 
 .main-layout.chart-only { grid-template-columns: minmax(0, 1fr); }
-.workspace-dialog-loading { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; background: #0008; color: var(--text); }
 
 .panel {
   background: transparent;
@@ -704,7 +703,8 @@
 }
 
 /* 포지션 그룹도 함께 보일 때만 포트폴리오를 5행으로 잘라 스크롤 */
-#sidebar-invest.both-on .tas-mkt-list {
+#sidebar-invest.both-on .tas-mkt-list,
+#paper-invest.both-on .tas-mkt-list {
   max-height: 220px;
   overflow-y: auto;
 }

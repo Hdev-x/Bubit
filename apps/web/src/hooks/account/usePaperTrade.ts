@@ -7,7 +7,7 @@ import {
 const EMPTY: PaperAccount = { balance: 0, peakEquity: 0, positions: [], orders: [] };
 
 /** 미체결 주문이 있는 동안만 재조회하며 늦은 조회가 주문 응답을 덮지 않게 한다. */
-export function usePaperTrade() {
+export function usePaperTrade(enabled = true) {
   const [account, setAccount] = useState(EMPTY);
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -17,7 +17,7 @@ export function usePaperTrade() {
   const mutating = useRef(false);
 
   const refetch = useCallback(async () => {
-    if (!mounted.current || mutating.current) return;
+    if (!enabled || !mounted.current || mutating.current) return;
     const version = ++request.current;
     try {
       const next = await fetchPaperAccount();
@@ -30,16 +30,21 @@ export function usePaperTrade() {
         setError('모의계좌를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.');
       }
     }
-  }, []);
+  }, [enabled]);
 
   useEffect(() => {
     mounted.current = true;
-    void Promise.resolve().then(refetch);
     return () => { mounted.current = false; request.current += 1; };
-  }, [refetch]);
+  }, []);
 
   useEffect(() => {
-    if (!account.orders.length) return;
+    let cancelled = false;
+    if (enabled) void Promise.resolve().then(() => { if (!cancelled) void refetch(); });
+    return () => { cancelled = true; if (!mutating.current) request.current += 1; };
+  }, [enabled, refetch]);
+
+  useEffect(() => {
+    if (!enabled || !account.orders.length) return;
     let stopped = false;
     let timer: number;
     const poll = async () => {
@@ -48,10 +53,10 @@ export function usePaperTrade() {
     };
     timer = window.setTimeout(poll, 3000);
     return () => { stopped = true; window.clearTimeout(timer); };
-  }, [account.orders.length, refetch]);
+  }, [enabled, account.orders.length, refetch]);
 
   const mutate = useCallback(async (operation: () => Promise<PaperAccount>) => {
-    if (mutating.current) return false;
+    if (!enabled || !mounted.current || mutating.current) return false;
     mutating.current = true;
     const version = ++request.current;
     setBusy(true);
@@ -69,7 +74,7 @@ export function usePaperTrade() {
       mutating.current = false;
       if (mounted.current) setBusy(false);
     }
-  }, []);
+  }, [enabled]);
 
   return {
     account, ready, busy, error, refetch,
