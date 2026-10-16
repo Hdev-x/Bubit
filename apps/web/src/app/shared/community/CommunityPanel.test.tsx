@@ -5,6 +5,26 @@ import { cleanupRenderComponents, renderComponent } from '../../../test/renderCo
 import { CommunityPanel } from './CommunityPanel';
 import type { CommunityPage } from '../../../api/server/communityApi';
 
+function messagePage(ids: number[], hasMore = false): CommunityPage {
+  return { items: ids.map(id => ({ id, scope: 'board', exchange: '', market: '', symbol: '', parentId: null,
+    title: '', body: `메시지 ${id}`, authorName: '작성자', avatarUrl: '/avatar.png', owned: false, liked: false,
+    likeCount: 0, commentCount: 0, imageId: null, createdAt: `2026-01-01T00:0${id}:00Z`, updatedAt: `2026-01-01T00:0${id}:00Z` })), hasMore };
+}
+
+function scrollMetrics(feed: HTMLDivElement) {
+  let height = 1000;
+  let top = 0;
+  Object.defineProperties(feed, {
+    scrollHeight: { configurable: true, get: () => height },
+    clientHeight: { configurable: true, value: 200 },
+    scrollTop: { configurable: true, get: () => top, set: value => { top = Math.max(0, Math.min(value, height - 200)); } },
+  });
+  return {
+    resize: (value: number) => { height = value; },
+    scroll: (value: number) => { feed.scrollTop = value; feed.dispatchEvent(new Event('scroll', { bubbles: true })); },
+  };
+}
+
 const mocks = vi.hoisted(() => ({ fetch: vi.fn(), subscribe: vi.fn(), close: vi.fn(), create: vi.fn() }));
 vi.mock('../../../api/server/communityApi', () => ({
   fetchCommunity: mocks.fetch, subscribeCommunity: mocks.subscribe,
@@ -15,6 +35,70 @@ beforeEach(() => { vi.resetAllMocks(); mocks.subscribe.mockReturnValue(mocks.clo
 afterEach(async () => { await cleanupRenderComponents(); vi.useRealTimers(); });
 
 describe('community panel lifecycle', () => {
+  it('shows oldest messages first and follows new messages only while reading the bottom', async () => {
+    vi.useFakeTimers();
+    let resolve!: (page: CommunityPage) => void;
+    mocks.fetch.mockImplementationOnce(() => new Promise<CommunityPage>(done => { resolve = done; }));
+    const view = await renderComponent(<CommunityPanel user={null} exchange="bitget" market="spot" symbol="BTCUSDT" onLogin={vi.fn()} />);
+    const feed = view.container.querySelector<HTMLDivElement>('.community-feed')!;
+    const metrics = scrollMetrics(feed);
+    const first = messagePage([3, 2, 1], true);
+    await act(async () => resolve(first));
+    expect([...view.container.querySelectorAll('.community-post-body')].map(node => node.textContent)).toEqual(['메시지 1', '메시지 2', '메시지 3']);
+    expect(first.items.map(post => post.id)).toEqual([3, 2, 1]);
+    expect(feed.firstElementChild?.className).toBe('community-pagination');
+    expect(feed.scrollTop).toBe(800);
+
+    metrics.resize(1200);
+    await act(async () => feed.querySelector('img')!.dispatchEvent(new Event('load')));
+    expect(feed.scrollTop).toBe(1000);
+    const changed = mocks.subscribe.mock.calls[0][1] as () => void;
+    mocks.fetch.mockResolvedValue(messagePage([4, 3, 2], true));
+    metrics.resize(1400);
+    await act(async () => { changed(); vi.advanceTimersByTime(400); });
+    expect(feed.scrollTop).toBe(1200);
+
+    await act(async () => metrics.scroll(200));
+    mocks.fetch.mockResolvedValue(messagePage([5, 4, 3], true));
+    metrics.resize(1600);
+    await act(async () => { changed(); vi.advanceTimersByTime(400); });
+    expect(feed.scrollTop).toBe(200);
+    metrics.resize(1800);
+    await act(async () => feed.querySelector('img')!.dispatchEvent(new Event('load')));
+    expect(feed.scrollTop).toBe(200);
+  });
+
+  it('moves to the bottom on page changes and returns to the latest page after sending', async () => {
+    let resolve!: (page: CommunityPage) => void;
+    mocks.fetch.mockImplementationOnce(() => new Promise<CommunityPage>(done => { resolve = done; }));
+    mocks.create.mockResolvedValue(undefined);
+    const view = await renderComponent(<CommunityPanel user={{ username: 'member@example.test', name: '회원', role: 'USER' }}
+      exchange="bitget" market="spot" symbol="BTCUSDT" onLogin={vi.fn()} />);
+    const feed = view.container.querySelector<HTMLDivElement>('.community-feed')!;
+    const metrics = scrollMetrics(feed);
+    await act(async () => resolve(messagePage([6, 5, 4], true)));
+    await act(async () => metrics.scroll(100));
+    mocks.fetch.mockImplementationOnce(() => new Promise<CommunityPage>(done => { resolve = done; }));
+    await act(async () => view.container.querySelectorAll<HTMLButtonElement>('.community-pagination button')[1].click());
+    expect(mocks.fetch.mock.lastCall?.[0].page).toBe(1);
+    metrics.resize(1200);
+    await act(async () => resolve(messagePage([3, 2, 1])));
+    expect(feed.scrollTop).toBe(1000);
+
+    await act(async () => metrics.scroll(150));
+    mocks.fetch.mockResolvedValue(messagePage([7, 6, 5], true));
+    const textarea = view.container.querySelector<HTMLTextAreaElement>('.community-composer textarea')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(textarea, '새 메시지');
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    metrics.resize(1400);
+    await act(async () => textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })));
+    expect(mocks.fetch.mock.lastCall?.[0].page).toBe(0);
+    expect(feed.scrollTop).toBe(1200);
+    expect(view.container.querySelector('.community-post:last-child .community-post-body')?.textContent).toBe('메시지 7');
+  });
+
   it('coalesces realtime events while a slow read is in flight', async () => {
     vi.useFakeTimers();
     let resolve!: (value: CommunityPage) => void;
