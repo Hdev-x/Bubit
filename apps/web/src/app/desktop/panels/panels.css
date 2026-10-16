@@ -764,6 +764,10 @@
 .wm-list-fade { animation: wmListFade 0.22s ease; }
 
 .wm-empty { text-align: center; color: #6b7280; font-size: 13px; padding: 28px 0; }
+.wm-retry { display: block; margin: 10px auto 0; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); cursor: pointer; }
+.wm-list-status { display: flex; align-items: center; gap: 8px; margin: 0; padding: 8px 12px; color: var(--text3); font-size: 12px; }
+.wm-list-status .wm-retry { margin: 0; flex-shrink: 0; }
+.wm-market-list .wm-row { height: 54px; box-sizing: border-box; }
 
 .wm-row { display: flex; align-items: center; gap: 8px; width: 100%; padding: 10.5px 0; border: 0; background: transparent; text-align: left; cursor: pointer; }
 

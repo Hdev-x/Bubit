@@ -46,7 +46,7 @@ afterEach(async () => {
   vi.useRealTimers();
 });
 
-const props = { selectedSymbol: 'BTCUSDT', onSelectSymbol: vi.fn(), onOpenChart: vi.fn(), onLogout: vi.fn() };
+const props = { user: { username: 'tester', role: 'USER' }, selectedSymbol: 'BTCUSDT', onSelectSymbol: vi.fn(), onOpenChart: vi.fn(), onLogout: vi.fn() };
 
 describe('CoinListPage selection reset', () => {
   it('KRW 거래소별 미지원 timeframe만 비활성화한다', async () => {
@@ -151,4 +151,18 @@ describe('CoinListPage selection reset', () => {
 
     expect(view.container.querySelector('[data-testid="total-assets"]')?.textContent).toBe('3');
   });
+  it('guest는 자산 영역을 mount하거나 계좌를 조회하지 않는다', async () => {
+    vi.useFakeTimers();
+    const view = await renderComponent(<CoinListPage {...props} user={null} active />);
+    await act(async () => vi.advanceTimersByTimeAsync(20_000));
+    expect(fetchMainTrade).not.toHaveBeenCalled();
+    expect(view.container.querySelector('[data-testid="total-assets"]')).toBeNull();
+    await view.rerender(<CoinListPage {...props} active />);
+    expect(fetchMainTrade).toHaveBeenCalledOnce();
+    await view.rerender(<CoinListPage {...props} user={null} active />);
+    await act(async () => vi.advanceTimersByTimeAsync(20_000));
+    expect(fetchMainTrade).toHaveBeenCalledOnce();
+    expect(view.container.querySelector('[data-testid="total-assets"]')).toBeNull();
+  });
+
 });

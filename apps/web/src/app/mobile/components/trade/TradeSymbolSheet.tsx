@@ -7,7 +7,7 @@ import { fetchCoinFuturesTickers, fetchCoinTickers, fetchBinanceSpotTickers, fet
 import { fetchUpbitSpotTickers, fetchBithumbSpotTickers } from '../../../../api/exchange/krw/krwTickers';
 import { subscribeBitgetSpotTickers, subscribeBitgetFuturesTickers, type RealtimeTicker } from '../../../../api/server/coinRealtime';
 import { usePricePrecision } from '../../../../hooks/market/usePricePrecision';
-import { formatPriceWithDecimals } from '../../../../shared/utils/coinFormatters';
+import { formatPriceWithDecimals, getMarketPriceDecimals, priceDecimalPlaces } from '../../../../shared/utils/coinFormatters';
 import type { CoinTicker } from '../../../../shared/types/market';
 import { EXCHANGE_OPTIONS, isFuturesSupported, type ExchangeId } from '../../../../shared/constants/exchanges';
 import './trade.css';
@@ -73,11 +73,10 @@ export default function TradeSymbolSheet({ isOpen, onClose, initialMarket, excha
   const [previousView, setPreviousView] = useState({ isOpen, initialMarket, exchange });
   // 실시간 WS 시세 — 거래소·마켓·심볼로 구분해 보이는 행에 덮어씀.
   const [liveMap, setLiveMap] = useState<Record<string, RealtimeTicker>>({});
-  // 가격 소수점 — 마켓과 동일: precisionMap(백엔드) 우선, 없으면 ticker.tickDecimals. (비트겟 전용이라 BN_ 분기 없음)
   const { precisionMap } = usePricePrecision();
   const getDecimals = useCallback(
-    (t: CoinTicker) => precisionMap.get(t.symbol) ?? t.tickDecimals,
-    [precisionMap],
+    (t: CoinTicker, market: Market, price: number) => getMarketPriceDecimals(precisionMap, sheetExchange, market, t.symbol, Math.max(t.tickDecimals, priceDecimalPlaces(price))),
+    [precisionMap, sheetExchange],
   );
   const dragControls = useDragControls();
 
@@ -372,7 +371,7 @@ export default function TradeSymbolSheet({ isOpen, onClose, initialMarket, excha
                         <span>{formatVolume(volume)}</span>
                       </div>
                       <div className="symbol-row-price">
-                        <strong className="last-price">{formatPriceWithDecimals(price, getDecimals(t))}</strong>
+                        <strong className="last-price">{formatPriceWithDecimals(price, getDecimals(t, market, price))}</strong>
                         <span className={changeRate >= 0 ? 'up' : 'down'}>
                           {changeRate >= 0 ? '+' : ''}{(changeRate * 100).toFixed(2)}%
                         </span>

@@ -9,6 +9,7 @@ import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.messaging.support.NativeMessageHeaderAccessor;
 import org.springframework.security.access.AccessDeniedException;
 
+import java.security.Principal;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -35,12 +36,9 @@ class WebSocketAuthenticationInterceptorTest {
     }
 
     @Test
-    void connectRejectsMissingMalformedAndDuplicateCredentialsAfterRemovingHeader() {
+    void connectRejectsMalformedAndDuplicateCredentialsAfterRemovingHeader() {
         JwtProvider jwtProvider = new JwtProvider(SECRET, 60_000);
         WebSocketAuthenticationInterceptor interceptor = new WebSocketAuthenticationInterceptor(jwtProvider);
-
-        Message<byte[]> missing = stomp(StompCommand.CONNECT, null);
-        assertAuthenticationFailed(() -> interceptor.preSend(missing, CHANNEL));
 
         Message<byte[]> malformed = stomp(StompCommand.CONNECT, List.of("Token " + DUMMY_CREDENTIAL));
         assertAuthenticationFailed(() -> interceptor.preSend(malformed, CHANNEL));
@@ -50,6 +48,39 @@ class WebSocketAuthenticationInterceptorTest {
                 List.of("Bearer " + DUMMY_CREDENTIAL, "Bearer another.dummy.credential"));
         assertAuthenticationFailed(() -> interceptor.preSend(duplicate, CHANNEL));
         assertCredentialRemoved(duplicate, DUMMY_CREDENTIAL);
+    }
+
+    @Test
+    void anonymousConnectAndStompCanSubscribeOnlyToLiteralPublicMarketDestinations() {
+        WebSocketAuthenticationInterceptor interceptor = new WebSocketAuthenticationInterceptor(new JwtProvider(SECRET, 60_000));
+        for (StompCommand command : List.of(StompCommand.CONNECT, StompCommand.STOMP)) {
+            Message<byte[]> connect = stomp(command, null);
+            interceptor.preSend(connect, CHANNEL);
+            Principal guest = originalAccessor(connect).getUser();
+            assertNotNull(guest);
+
+            for (String destination : List.of("/topic/coin/BTCUSDT", "/topic/coin-futures/ETHUSDT",
+                    "/topic/binance-spot/1000SHIBUSDT", "/topic/binance-futures/BTCUSDT",
+                    "/topic/binance-spot/币安人生USDT", "/topic/coin/TEST_TOKEN-1",
+                    "/topic/binance-kline/spot/BTCUSDT/1m", "/topic/binance-kline/futures/BTCUSDT/1M")) {
+                assertDoesNotThrow(() -> interceptor.preSend(subscription(guest, destination), CHANNEL), destination);
+            }
+
+            for (String destination : List.of("/topic/account/tester", "/user/queue/balance", "/topic/coin/",
+                    "/topic/coin/*", "/topic/coin/**", "/topic/coin/BTC?SDT", "/topic/coin/{symbol}",
+                    "/topic/coin/../account", "/topic/coin/BTCUSDT/extra", "/topic/coin/BTCUSDT\n",
+                    "/topic/binance-kline/spot/BTCUSDT/*", "/topic/binance-kline/other/BTCUSDT/1m",
+                    "/topic/binance-kline/spot/BTCUSDT/0m", "/topic/binance-kline/spot/BTCUSDT/1m/")) {
+                assertAuthenticationFailed(() -> interceptor.preSend(subscription(guest, destination), CHANNEL));
+            }
+
+            Message<byte[]> send = stomp(StompCommand.SEND, null);
+            originalAccessor(send).setUser(guest);
+            originalAccessor(send).setDestination("/topic/coin/BTCUSDT");
+            assertAuthenticationFailed(() -> interceptor.preSend(send, CHANNEL));
+            assertAuthenticationFailed(() -> interceptor.preSend(subscription(null, "/topic/coin/BTCUSDT"), CHANNEL));
+            assertAuthenticationFailed(() -> interceptor.preSend(subscription(() -> guest.getName(), "/topic/coin/BTCUSDT"), CHANNEL));
+        }
     }
 
     @Test
@@ -66,6 +97,30 @@ class WebSocketAuthenticationInterceptorTest {
             assertFalse(error.toString().contains(token));
             assertCredentialRemoved(message, token);
         }
+    }
+
+    @Test
+    void communityReadsArePublicButClientsCannotPublishCommunityEvents() {
+        JwtProvider jwtProvider = new JwtProvider(SECRET, 60_000);
+        WebSocketAuthenticationInterceptor interceptor = new WebSocketAuthenticationInterceptor(jwtProvider);
+        Message<byte[]> connect = stomp(StompCommand.CONNECT, null);
+        interceptor.preSend(connect, CHANNEL);
+        Principal guest = originalAccessor(connect).getUser();
+        for (String destination : List.of("/topic/community/board", "/topic/community/feed/bitget/futures/BTCUSDT",
+                "/topic/community/feed/upbit/spot/KRW-BTC", "/topic/community/feed/binance/spot/币安人生USDT")) {
+            assertDoesNotThrow(() -> interceptor.preSend(subscription(guest, destination), CHANNEL));
+        }
+        for (String destination : List.of("/topic/community/**", "/topic/community/feed/bitget/futures/*",
+                "/topic/community/feed/other/spot/BTCUSDT", "/topic/community/board/extra")) {
+            assertAuthenticationFailed(() -> interceptor.preSend(subscription(guest, destination), CHANNEL));
+        }
+        Message<byte[]> authenticated = stomp(StompCommand.CONNECT,
+                List.of("Bearer " + jwtProvider.generateToken("tester", "USER")));
+        interceptor.preSend(authenticated, CHANNEL);
+        Message<byte[]> send = stomp(StompCommand.SEND, null);
+        originalAccessor(send).setUser(originalAccessor(authenticated).getUser());
+        originalAccessor(send).setDestination("/topic/community/board");
+        assertAuthenticationFailed(() -> interceptor.preSend(send, CHANNEL));
     }
 
     @Test
@@ -97,6 +152,13 @@ class WebSocketAuthenticationInterceptorTest {
         StompHeaderAccessor accessor = StompHeaderAccessor.create(command);
         accessor.setSessionId("test-session");
         return MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
+    }
+
+    private static Message<byte[]> subscription(Principal user, String destination) {
+        Message<byte[]> message = stomp(StompCommand.SUBSCRIBE, null);
+        originalAccessor(message).setUser(user);
+        originalAccessor(message).setDestination(destination);
+        return message;
     }
 
     private static StompHeaderAccessor originalAccessor(Message<?> message) {

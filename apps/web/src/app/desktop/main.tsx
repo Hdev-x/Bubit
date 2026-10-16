@@ -6,6 +6,7 @@ import '../../shared/ui/common.css'; // 양 앱 공용 규칙(.up/.down·스켈�
 import DesktopApp from './DesktopApp';
 import DesktopLogin from './DesktopLogin';
 import DesktopSignup from './DesktopSignup';
+import { DesktopAuthDialog } from './DesktopAuthDialog';
 import { fetchMe, logout } from '../../api/server/authApi';
 import type { AuthUser } from '../../api/server/authApi';
 
@@ -21,13 +22,14 @@ function Root() {
   if (user === undefined) {
     return <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#8a8c90', background: '#000' }}>불러오는 중…</div>;
   }
-  if (auth === 'login') {
-    return <DesktopLogin onLogin={(u) => { setUser(u); setAuth('none'); }} onSignupClick={() => setAuth('signup')} onClose={() => setAuth('none')} />;
-  }
-  if (auth === 'signup') {
-    return <DesktopSignup onSignup={(u) => { setUser(u); setAuth('none'); }} onBackToLogin={() => setAuth('login')} onClose={() => setAuth('none')} />;
-  }
-  return <DesktopApp user={user} onLoginClick={() => setAuth('login')} onLogout={() => { logout(); window.location.reload(); }} />;
+  return <>
+    <DesktopApp user={user} onUserChange={setUser} onLoginClick={() => setAuth('login')} onLogout={() => { logout(); window.location.reload(); }} />
+    {auth !== 'none' && <DesktopAuthDialog label={auth === 'login' ? '로그인' : '회원가입'} onClose={() => setAuth('none')}>
+      {auth === 'login'
+        ? <DesktopLogin onLogin={(u) => { setUser(u); setAuth('none'); }} onSignupClick={() => setAuth('signup')} onClose={() => setAuth('none')} />
+        : <DesktopSignup onSignup={(u) => { setUser(u); setAuth('none'); }} onBackToLogin={() => setAuth('login')} onClose={() => setAuth('none')} />}
+    </DesktopAuthDialog>}
+  </>;
 }
 
 // dev HMR 주의: 이 파일은 컴포넌트(Root)를 담고 있어 Vite React 플러그인이 HMR 경계로 삼는다. 훅·lib 파일이 바뀌면

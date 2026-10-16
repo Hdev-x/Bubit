@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -28,11 +29,13 @@ public class AuthController {
     private final MemberService memberService;
     private final PasswordEncoder passwordEncoder;
     private final JwtProvider jwtProvider;
+    private final ProfileService profiles;
 
-    public AuthController(MemberService memberService, PasswordEncoder passwordEncoder, JwtProvider jwtProvider) {
+    public AuthController(MemberService memberService, PasswordEncoder passwordEncoder, JwtProvider jwtProvider, ProfileService profiles) {
         this.memberService = memberService;
         this.passwordEncoder = passwordEncoder;
         this.jwtProvider = jwtProvider;
+        this.profiles = profiles;
     }
 
     /** 로그인: 자격 검증 후 JWT 토큰과 사용자 정보 반환 */
@@ -53,6 +56,7 @@ public class AuthController {
         body.put("token", token);
         body.put("username", member.getUsername());
         body.put("name", member.getName());
+        body.put("avatarUrl", profiles.avatarUrl(member.getUsername()));
         body.put("role", role);
         return ResponseEntity.ok(body);
     }
@@ -64,11 +68,13 @@ public class AuthController {
                 || req.getPassword() == null || req.getPassword().isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("message", "이메일과 비밀번호를 입력하세요."));
         }
+        try {
+            req.setName(ProfileService.validateName(req.getName()));
+        } catch (ResponseStatusException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", "닉네임은 2~20자로 입력하세요."));
+        }
         if (memberService.read(req) != null) {
             return ResponseEntity.status(409).body(Map.of("message", "이미 사용 중인 이메일입니다."));
-        }
-        if (req.getName() == null || req.getName().isBlank()) {
-            req.setName(req.getUsername());
         }
         try {
             memberService.create(req); // 비밀번호 BCrypt 해시 + 코인 지갑 생성, role=USER/status=ACTIVE
@@ -80,22 +86,29 @@ public class AuthController {
         body.put("token", token);
         body.put("username", req.getUsername());
         body.put("name", req.getName());
+        body.put("avatarUrl", null);
         body.put("role", "USER");
         return ResponseEntity.ok(body);
     }
 
     /** 현재 토큰의 사용자 정보 반환 (JwtAuthenticationFilter가 인증 컨텍스트를 채워둠) */
     @GetMapping("/me")
-    public ResponseEntity<?> me(Authentication authentication) {
+    public ResponseEntity<?> me(Authentication authentication) throws Exception {
         if (authentication == null || !authentication.isAuthenticated()) {
             return ResponseEntity.status(401).body(Map.of("message", "인증되지 않았습니다."));
         }
         String username = authentication.getName();
+        var query = new MemberDTO();
+        query.setUsername(username);
+        MemberDTO member = memberService.read(query);
+        if (member == null) return ResponseEntity.status(401).body(Map.of("message", "회원 정보를 찾을 수 없습니다."));
         String role = authentication.getAuthorities().stream().findFirst()
                 .map(a -> a.getAuthority().replace("ROLE_", ""))
                 .orElse("USER");
         Map<String, Object> body = new HashMap<>();
         body.put("username", username);
+        body.put("name", member.getName());
+        body.put("avatarUrl", profiles.avatarUrl(username));
         body.put("role", role);
         return ResponseEntity.ok(body);
     }

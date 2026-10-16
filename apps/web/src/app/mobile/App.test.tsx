@@ -3,24 +3,29 @@ import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanupRenderComponents, renderComponent } from '../../test/renderComponent';
 import App from './App';
+import type { AuthUser } from '../../api/server/authApi';
 
 const state = vi.hoisted(() => ({
+  tickerListeners: new Map<string, (ticker: { symbol: string; price: number; changeRate?: number }) => void>(),
+  me: vi.fn<() => Promise<AuthUser | null>>(),
   supported: vi.fn<(symbol: string, market: 'spot' | 'futures') => Promise<boolean>>(),
 }));
 
 vi.mock('../../api/client', () => ({ getToken: () => null }));
-vi.mock('../../api/server/authApi', () => ({ fetchMe: async () => ({ username: 'tester' }), logout: vi.fn() }));
+vi.mock('../../api/server/authApi', () => ({ fetchMe: state.me, logout: vi.fn() }));
 vi.mock('../../api/exchange/bitget/bitgetSymbols', () => ({
   prefetchBitgetSymbols: vi.fn(),
   isBitgetSymbolSupported: state.supported,
 }));
 vi.mock('../../api/exchange/binance/binanceSymbols', () => ({ prefetchBinanceSymbols: vi.fn() }));
 vi.mock('../../hooks/ui/usePageVisible', () => ({ useDocumentVisible: () => true }));
-vi.mock('../../hooks/market/useRealtimePrices', () => ({ useRealtimeTickers: () => ({}) }));
+vi.mock('../../api/server/coinRealtime', () => ({ listenRealtimeTicker: (topic: string, listener: (ticker: { symbol: string; price: number; changeRate?: number }) => void) => { state.tickerListeners.set(topic, listener); return { close: () => state.tickerListeners.delete(topic) }; } }));
 vi.mock('./components/BottomTabBar', () => ({ default: ({ onNavigate }: { onNavigate: (route: string) => void }) => <button onClick={() => onNavigate('/')}>go-market</button> }));
-vi.mock('./pages/LoginPage', () => ({ default: () => null }));
-vi.mock('./pages/AssetsPage', () => ({ default: () => null }));
-vi.mock('../../shared/ui/StrategyComingSoon', () => ({ default: () => null }));
+vi.mock('./pages/LoginPage', () => ({ default: ({ onSuccess, onBrowse }: { onSuccess: (user: AuthUser) => void; onBrowse: () => void }) => <div data-testid="login"><button onClick={() => onSuccess({ username: 'tester', role: 'USER' })}>login</button><button onClick={onBrowse}>browse</button></div> }));
+vi.mock('../shared/account/MyPageDialog', () => ({ default: ({ initialSection, onClose }: { initialSection: string; onClose: () => void }) => <div data-testid="settings" data-section={initialSection}><button onClick={onClose}>close-settings</button></div> }));
+vi.mock('../shared/paper/PaperTradingPanel', () => ({ PaperTradingPanel: ({ onOpenSettings }: { onOpenSettings: () => void }) => <div data-testid="paper"><button onClick={onOpenSettings}>paper-settings</button></div> }));
+vi.mock('./pages/AssetsPage', () => ({ default: () => <output data-testid="assets" /> }));
+vi.mock('../../shared/ui/StrategyComingSoon', () => ({ default: () => <output data-testid="strategy" /> }));
 vi.mock('./pages/CoinChartPage', () => ({ default: ({ active, routeActive, symbol, productType, exchange }: { active: boolean; routeActive: boolean; symbol: string; productType?: string; exchange: string }) => <output data-testid="chart" data-active={String(active)} data-route-active={String(routeActive)} data-symbol={symbol} data-product={productType} data-exchange={exchange} /> }));
 vi.mock('./pages/CoinListPage', () => ({ default: ({ active, onOpenTrade, onOpenChart, onSelectSymbol, onProductTypeChange, onExchangeChange, onLogout }: {
   active: boolean;
@@ -57,6 +62,8 @@ describe('mobile App market navigation', () => {
     vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false })));
     vi.stubGlobal('scrollTo', vi.fn());
     vi.stubGlobal('requestAnimationFrame', vi.fn((callback: FrameRequestCallback) => { callback(0); return 1; }));
+    state.tickerListeners.clear();
+    state.me.mockReset().mockResolvedValue({ username: 'tester', role: 'USER' });
     state.supported.mockReset();
     state.supported.mockResolvedValue(true);
   });
@@ -164,4 +171,78 @@ describe('mobile App market navigation', () => {
     expect(window.location.hash).toBe('#/chart');
     expect((view.container.querySelector('[data-testid="chart"]') as HTMLOutputElement).dataset.active).toBe('true');
   });
+  it('guest는 시장과 차트를 즉시 보고 거래 로그인 후 요청 종목을 유지한다', async () => {
+    state.me.mockResolvedValue(null);
+    const view = await renderComponent(<App />);
+    expect(view.container.querySelector('[data-testid="market"]')).not.toBeNull();
+    expect(view.container.querySelector('[data-testid="login"]')).toBeNull();
+    await click(view.container, 'open-chart');
+    expect((view.container.querySelector('[data-testid="chart"]') as HTMLElement).dataset.active).toBe('true');
+    await click(view.container, 'go-market');
+    await click(view.container, 'open-trade');
+    expect(state.supported).not.toHaveBeenCalled();
+    expect(view.container.querySelector('[data-testid="orders"]')).toBeNull();
+    expect(view.container.querySelector('[data-testid="login"]')).not.toBeNull();
+    await click(view.container, 'login');
+    const orders = view.container.querySelector('[data-testid="orders"]') as HTMLElement;
+    expect(orders.dataset.symbol).toBe('ETHUSDT');
+    expect(orders.dataset.market).toBe('spot');
+  });
+
+  it.each(['/orders', '/strategy', '/assets'])('guest의 %s 직접 진입은 private 화면을 mount하지 않는다', async route => {
+    state.me.mockResolvedValue(null);
+    window.location.hash = route;
+    const view = await renderComponent(<App />);
+    expect(view.container.querySelector('[data-testid="login"]')).not.toBeNull();
+    expect(view.container.querySelector('[data-testid="orders"], [data-testid="strategy"], [data-testid="assets"]')).toBeNull();
+    await click(view.container, 'browse');
+    expect(view.container.querySelector('[data-testid="login"]')).toBeNull();
+    expect(view.container.querySelector('[data-testid="market"]')).not.toBeNull();
+  });
+
+  it('인증 서버 응답을 기다리는 동안에도 시장을 표시한다', async () => {
+    const me = deferred<AuthUser | null>();
+    state.me.mockReturnValue(me.promise);
+    const view = await renderComponent(<App />);
+    expect(view.container.querySelector('[data-testid="market"]')).not.toBeNull();
+    expect(view.container.querySelector('[data-testid="login"]')).toBeNull();
+    await act(async () => me.resolve(null));
+  });
+
+  it('타이틀은 선택 거래소·현선물의 공유 시세만 듣고 늦은 종목 이벤트를 무시한다', async () => {
+    const view = await renderComponent(<App />);
+    const oldTicker = state.tickerListeners.get('/topic/binance-futures/BTCUSDT')!;
+    await act(async () => oldTicker({ symbol: 'BTCUSDT', price: 100 }));
+    expect(document.title).toContain('BTCUSDT 100');
+    await click(view.container, 'open-trade');
+    expect(state.tickerListeners.has('/topic/binance-futures/BTCUSDT')).toBe(false);
+    const spotTicker = state.tickerListeners.get('/topic/binance-spot/ETHUSDT')!;
+    await act(async () => spotTicker({ symbol: 'ETHUSDT', price: 200 }));
+    expect(document.title).toContain('ETHUSDT 200');
+    await act(async () => oldTicker({ symbol: 'BTCUSDT', price: 999 }));
+    expect(document.title).toContain('ETHUSDT 200');
+    expect([...state.tickerListeners.keys()].some(topic => topic.includes('/coin'))).toBe(false);
+  });
+
+  it('모의투자에서 설정을 열면 조회를 멈추고 닫은 뒤 계좌를 새로 불러온다', async () => {
+    const view = await renderComponent(<App />);
+    await click(view.container, 'open-trade');
+    await click(view.container, '모의투자');
+    await click(view.container, 'paper-settings');
+    expect(view.container.querySelector('[data-testid="paper"]')).toBeNull();
+    expect(view.container.querySelector('[data-testid="settings"]')?.getAttribute('data-section')).toBe('paper');
+    await click(view.container, 'close-settings');
+    expect(view.container.querySelector('[data-testid="paper"]')).not.toBeNull();
+  });
+
+  it('모의투자 선택 시 계좌 화면을 닫고 화면을 떠나면 모의 조회도 멈춘다', async () => {
+    const view = await renderComponent(<App />);
+    await click(view.container, 'open-trade');
+    await click(view.container, '모의투자');
+    expect(view.container.querySelector('[data-testid="orders"]')).toBeNull();
+    expect(view.container.querySelector('[data-testid="paper"]')).not.toBeNull();
+    await click(view.container, 'go-market');
+    expect(view.container.querySelector('[data-testid="paper"]')).toBeNull();
+  });
+
 });

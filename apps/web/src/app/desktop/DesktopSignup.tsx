@@ -17,11 +17,13 @@ export default function DesktopSignup({ onSignup, onBackToLogin, onClose }: { on
     e.preventDefault();
     setError('');
     if (!email.trim() || !password) { setError('이메일과 비밀번호를 입력하세요.'); return; }
+    const nickname = name.trim();
+    if (Array.from(nickname).length < 2 || Array.from(nickname).length > 20) { setError('닉네임은 2~20자로 입력하세요.'); return; }
     if (password.length < 4) { setError('비밀번호는 4자 이상이어야 합니다.'); return; }
     if (password !== confirm) { setError('비밀번호가 일치하지 않습니다.'); return; }
     setBusy(true);
     try {
-      const user = await signup(email.trim(), password, name.trim() || email.trim());
+      const user = await signup(email.trim(), password, nickname);
       onSignup(user);
     } catch (err) {
       setError(err instanceof Error ? err.message : '회원가입 실패');
@@ -36,7 +38,6 @@ export default function DesktopSignup({ onSignup, onBackToLogin, onClose }: { on
       <header className="header" style={{ background: 'transparent', borderBottom: 'none' }}>
         <div className="brand-mark">
           <img className="header-logo" src={botzMark} alt="Bubit" />
-          <span className="brand-beta-badge">Beta</span>
         </div>
         {onClose && <button type="button" onClick={onClose} style={styles.close} aria-label="닫기">✕</button>}
       </header>
@@ -61,14 +62,15 @@ export default function DesktopSignup({ onSignup, onBackToLogin, onClose }: { on
             </label>
 
             <label style={styles.field}>
-              <span style={styles.fieldLabel}>닉네임 <span style={styles.optional}>(선택)</span></span>
+              <span style={styles.fieldLabel}>닉네임</span>
               <input
                 style={styles.input}
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="표시 이름"
+                placeholder="닉네임 (2~20자)"
                 autoComplete="nickname"
+                required
               />
             </label>
 
@@ -125,7 +127,6 @@ const styles: Record<string, CSSProperties> = {
   title: { color: '#f5f5f5', fontSize: 30, fontWeight: 800, margin: '4px 0 14px', lineHeight: 1.1 },
   field: { display: 'flex', flexDirection: 'column', gap: 10 },
   fieldLabel: { color: '#f5f5f5', fontSize: 14, fontWeight: 700 },
-  optional: { color: '#8a8d94', fontSize: 12, fontWeight: 500 },
   input: {
     width: '100%', height: 48, background: '#202126', border: '1px solid #202126', borderRadius: 8,
     padding: '0 14px', color: '#f6f6f6', fontSize: 16, fontWeight: 700, outline: 'none', boxSizing: 'border-box',

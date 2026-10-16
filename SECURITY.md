@@ -1,6 +1,6 @@
 # 보안 문제 신고
 
-인증·접근 제어 문제나 자격증명·개인정보 노출 등은 [GitHub 비공개 취약점 신고](https://github.com/Hdev-x/Bubit/security/advisories/new)로 알려주세요. 이 저장소의 private vulnerability reporting 기능을 활성화했습니다. 일반 사용 오류는 [지원 안내](SUPPORT.md)의 공개 Issue 경로를 이용하세요.
+인증·접근 제어 문제나 자격증명·개인정보 노출 등은 [GitHub 비공개 취약점 신고](https://github.com/Hdev-x/Bubit/security/advisories/new)로 알려주세요. 공개 포트폴리오 저장소의 private vulnerability reporting 경로를 사용합니다. 일반 사용 오류는 [지원 안내](SUPPORT.md)의 공개 Issue 경로를 이용하세요.
 
 ## 신고할 내용
 

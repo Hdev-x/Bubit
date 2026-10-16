@@ -1,15 +1,18 @@
-import type { Dispatch, RefObject, SetStateAction } from 'react';
+import type { Dispatch, ReactNode, RefObject, SetStateAction } from 'react';
 import type { AuthUser } from '../../../api/server/authApi';
 import botzMark from '../../../assets/botz-mark.svg';
+import './DesktopHeader.css';
 
 export type WatchMode = 'hidden' | 'float' | 'dock';
 
 // 상단 헤더 — 로고·검색·관심 시세창 토글·프로필 메뉴. DesktopApp에서 JSX만 옮김 .
 // menuRef는 DesktopApp의 바깥 클릭 감지 effect가 같이 쓰므로 부모가 소유한다.
-export function DesktopHeader({ user, onLoginClick, onLogout, menuOpen, setMenuOpen, menuRef, effWatchMode, setWatchMode }: {
+export function DesktopHeader({ user, onLoginClick, onLogout, onProfileClick, children, menuOpen, setMenuOpen, menuRef, effWatchMode, setWatchMode }: {
   user: AuthUser | null;
   onLoginClick: () => void;
   onLogout: () => void;
+  onProfileClick?: () => void;
+  children?: ReactNode;
   menuOpen: boolean;
   setMenuOpen: Dispatch<SetStateAction<boolean>>;
   menuRef: RefObject<HTMLDivElement | null>;
@@ -20,13 +23,13 @@ export function DesktopHeader({ user, onLoginClick, onLogout, menuOpen, setMenuO
           <header className="header">
             <div className="brand-mark">
               <img className="header-logo" src={botzMark} alt="Bubit" />
-              <span className="brand-beta-badge">Beta</span>
             </div>
             <div className="header-right">
-              <div className="header-search">
+              {children}
+              {/* <div className="header-search">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" /></svg>
                 <input placeholder="검색" />
-              </div>
+              </div> */}
               {user && (
                 <button
                   className={`header-watch-btn${effWatchMode !== 'hidden' ? ' active' : ''}`}
@@ -49,13 +52,13 @@ export function DesktopHeader({ user, onLoginClick, onLogout, menuOpen, setMenuO
                   aria-expanded={menuOpen}
                   aria-label="프로필"
                 >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" /></svg>
+                  {user.avatarUrl ? <img className="header-profile-photo" src={user.avatarUrl} alt="" /> : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" /></svg>}
                 </button>
                 {menuOpen && (
                   <div className="header-menu" role="menu">
                     <div className="header-menu-user">
                       <div className="header-menu-avatar">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" /></svg>
+                        {user.avatarUrl ? <img className="header-profile-photo" src={user.avatarUrl} alt="" /> : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" /></svg>}
                       </div>
                       <div className="header-menu-meta">
                         <div className="header-menu-name">{user.name || user.username}</div>
@@ -63,6 +66,7 @@ export function DesktopHeader({ user, onLoginClick, onLogout, menuOpen, setMenuO
                       </div>
                     </div>
                     <div className="header-menu-divider" />
+                    {onProfileClick && <button className="header-menu-item" role="menuitem" onClick={() => { setMenuOpen(false); onProfileClick(); }}>설정</button>}
                     <button className="header-menu-item" role="menuitem" onClick={onLogout}>
                       로그아웃
                     </button>

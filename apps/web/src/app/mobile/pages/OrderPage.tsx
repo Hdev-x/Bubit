@@ -53,7 +53,7 @@ function loadTabOrder(): TradeTab[] {
 
 export default function OrderPage({ symbol, active, onSelectSymbol, onProductTypeChange, onExchangeChange, onOpenChart, tradeMarketReq, onTabBar }: Props) {
   // 톱 탭: Futures(선물) / Spot(현물) / Stock(주식, 준비중). 기본 선물. (Bot은 전략 탭으로 이동)
-  const [activeTab, setActiveTab] = useState<TradeTab>('futures');
+  const [activeTab, setActiveTab] = useState<TradeTab>(tradeMarketReq?.market ?? 'futures');
   // 탭 순서(유저 편집) + 편집 시트
   const [tabOrder, setTabOrder] = useState<TradeTab[]>(loadTabOrder);
   const [tabEditOpen, setTabEditOpen] = useState(false);
@@ -118,7 +118,7 @@ export default function OrderPage({ symbol, active, onSelectSymbol, onProductTyp
     setDepthScale('scale2');
   }
   if (!isFuturesMarket && depthScale === 'scale3') setDepthScale('scale2');
-  const { getTickDecimals } = usePricePrecision(2);
+  const { getTickDecimals } = usePricePrecision(2, 'BITGET', isFuturesMarket ? 'futures' : 'spot');
   const realtimePrices = useRealtimePrices(active ? [symbol] : [], isFuturesMarket); // 가운데 현재가용 실시간 시세 — 탭에 맞는 선물/현물 티커 (비활성 시 구독 해제)
 
   // 하단 탭 상태 및 옵션

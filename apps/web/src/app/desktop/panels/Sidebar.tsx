@@ -1,11 +1,12 @@
-import type { Dispatch, SetStateAction } from 'react';
+import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import StrategyComingSoon from '../../../shared/ui/StrategyComingSoon';
 import { MarketPanel } from './MarketPanel';
 import { InvestSection, type InvestSectionProps } from './InvestSection';
 import { SECTIONS, type Section } from '../lib/sections';
+import './Sidebar.css';
 
 // 사이드바 패널 — 로그인 게이트·섹션 제목·통화 토글·섹션 본문. DesktopApp에서 JSX만 옮김 .
-export function Sidebar({ sidebarOpen, section, sectionLocked, krw, setKrw, marketActive, handleSelectChart, invest }: {
+export function Sidebar({ sidebarOpen, section, sectionLocked, krw, setKrw, marketActive, handleSelectChart, invest, paper }: {
   sidebarOpen: boolean;
   section: Section;
   sectionLocked: boolean;
@@ -14,6 +15,13 @@ export function Sidebar({ sidebarOpen, section, sectionLocked, krw, setKrw, mark
   marketActive: boolean;
   handleSelectChart: (symbol: string, market: string, exchange: string) => void;
   invest: InvestSectionProps;
+  paper: {
+    enabled: boolean;
+    orderOpen: boolean;
+    onToggle: () => void;
+    onToggleOrder: () => void;
+    content: ReactNode;
+  };
 }) {
   return (
         <aside className={`sidebar-panel${sidebarOpen ? ' open' : ''}`}>
@@ -28,6 +36,12 @@ export function Sidebar({ sidebarOpen, section, sectionLocked, krw, setKrw, mark
           <div className="sidebar-header">
             <span className="sidebar-title-wrap">
               {SECTIONS.find((s) => s.id === section)?.title}
+              {section === 'invest' && <>
+                <button type="button" className={`paper-toggle${paper.enabled ? ' on' : ''}`} aria-pressed={paper.enabled}
+                  onClick={paper.onToggle} title={paper.enabled ? '실제 투자로 전환' : '모의투자로 전환'}>모의투자</button>
+                {paper.enabled && <button type="button" className={`paper-order-open${paper.orderOpen ? ' on' : ''}`} aria-pressed={paper.orderOpen}
+                  onClick={paper.onToggleOrder} title="모의 주문창">주문</button>}
+              </>}
             </span>
             {/* 원화/USD 전환은 내 잔고에만 적용되므로 내투자 섹션에서만 노출 */}
             {section === 'invest' && (
@@ -42,7 +56,10 @@ export function Sidebar({ sidebarOpen, section, sectionLocked, krw, setKrw, mark
           </div>
 
           {/* 내 투자 */}
-          {section === 'invest' && <InvestSection {...invest} />}
+          {section === 'invest' && <div className="sidebar-invest-view" hidden={paper.enabled}>
+            <InvestSection {...invest} />
+          </div>}
+          {paper.content}
 
           {section === 'market' && (
             <div className="sidebar-section web-market">

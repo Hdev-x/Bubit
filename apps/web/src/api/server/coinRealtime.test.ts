@@ -41,7 +41,7 @@ class FakeWebSocket {
   }
 }
 
-describe('coinRealtime STOMP authentication', () => {
+describe('coinRealtime STOMP', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.stubGlobal('WebSocket', FakeWebSocket);
@@ -122,6 +122,44 @@ describe('coinRealtime STOMP authentication', () => {
     expect(second.sent.some(frame => frame.startsWith('DISCONNECT'))).toBe(true);
     await vi.advanceTimersByTimeAsync(20_000);
     expect(FakeWebSocket.instances).toHaveLength(2);
+  });
+
+  it('shares the latest price across ticker and candle listeners without opening another socket', async () => {
+    const api = await import('./coinRealtime');
+    const header = vi.fn();
+    const sidebar = vi.fn();
+    const chart = vi.fn();
+    const otherMarket = vi.fn();
+    const candle = vi.fn();
+    const a = api.subscribeBinanceFuturesTickers(['BTCUSDT'], header);
+    const b = api.subscribeBinanceFuturesTickers(['BTCUSDT'], sidebar);
+    const c = api.listenRealtimeTicker('/topic/binance-futures/BTCUSDT', chart);
+    const d = api.listenRealtimeTicker('/topic/binance-spot/BTCUSDT', otherMarket);
+    expect(FakeWebSocket.instances).toHaveLength(2);
+    const k = api.subscribeBinanceKline('BTCUSDT', true, '1h', candle);
+    const [first, second, kline] = FakeWebSocket.instances;
+    const tick = (price: number, ts: number) => `MESSAGE\n\n${JSON.stringify({ symbol: 'BTCUSDT', price, ts })}`;
+    // Client clock skew must not suppress valid exchange events; only event order matters.
+    first.message(tick(100, 1000));
+    second.message(tick(99, 900));
+    second.message(tick(100, 1000));
+    for (const listener of [header, sidebar, chart]) {
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(listener).toHaveBeenLastCalledWith(expect.objectContaining({ price: 100, ts: 1000 }));
+    }
+    kline.message(`MESSAGE\n\n${JSON.stringify({ ts: 1100, time: 0, open: 99, high: 105, low: 99, close: 105, volume: 4 })}`);
+    for (const listener of [header, sidebar, chart]) {
+      expect(listener).toHaveBeenLastCalledWith(expect.objectContaining({ price: 105, ts: 1100 }));
+    }
+    expect(candle).toHaveBeenCalledWith(expect.objectContaining({ close: 105, volume: 4 }));
+    expect(otherMarket).not.toHaveBeenCalled();
+    a.close();
+    first.message(tick(200, 1200));
+    expect(chart).toHaveBeenCalledTimes(2);
+    second.message(tick(106, 1200));
+    expect(header).toHaveBeenCalledTimes(2);
+    expect(chart).toHaveBeenLastCalledWith(expect.objectContaining({ price: 106 }));
+    b.close(); c.close(); d.close(); k.close();
   });
 
   it('omits Authorization when the stored token could inject a STOMP header or frame', async () => {

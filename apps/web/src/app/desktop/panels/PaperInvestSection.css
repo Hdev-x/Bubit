@@ -1,0 +1,29 @@
+/* 자산·포트폴리오·포지션은 기존 내투자 tas/pos 스타일을 그대로 사용한다. */
+.paper-invest .tas-mkt-row { width: 100%; background: none; border: 0; color: inherit; font: inherit; text-align: left; }
+.paper-invest .tas-mkt-row:hover { background: #161618; }
+.paper-invest .pos-tab, .paper-invest-symbol { background: none; border: 0; padding: 0; text-align: left; cursor: pointer; font: inherit; }
+.paper-invest .pos-tabs { flex-wrap: wrap; gap: 12px; }
+.paper-invest .pos-tab { font-weight: 700; }
+.paper-invest-message { margin: 0; padding: 28px 16px; text-align: center; color: var(--text3, #8a8c90); font-size: 12px; line-height: 1.7; }
+.paper-invest-message button { display: block; margin: 12px auto 0; padding: 6px 10px; color: inherit; background: none; border: 1px solid #35383d; border-radius: 6px; cursor: pointer; }
+.paper-invest-empty { color: var(--text3, #8a8c90); font-size: 12px; padding: 12px 0; margin: 0; }
+.paper-invest-price-wait { display: block; margin-top: 8px; color: var(--text3, #8a8c90); font-size: 10px; line-height: 1.5; }
+.paper-invest-right { text-align: right; }
+.paper-invest-symbol { color: #eaecef; }
+.paper-invest-position-actions { display: flex; gap: 8px; margin-top: 10px; }
+.paper-invest-position-actions button { flex: 1; padding: 9px 0; border-radius: 6px; background: #2b3139; border: none; color: var(--down, #f6465d); font-size: 13px; font-weight: 600; cursor: pointer; }
+.paper-invest-position-actions button:disabled, .paper-invest-orders button:disabled { opacity: .5; cursor: default; }
+.paper-invest-orders { list-style: none; padding: 0; margin: 0; }
+.paper-invest-orders li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 0; border-bottom: 1px solid #202126; }
+.paper-invest-orders li > div { display: grid; gap: 5px; font-size: 12px; }
+.paper-invest-orders span { color: #848e9c; font-size: 11px; }
+.paper-invest-orders button { background: #202126; color: #eaecef; border: 0; border-radius: 6px; padding: 6px 9px; cursor: pointer; }
+.paper-invest-float { max-width: 100vw; max-height: calc(100dvh - 27px); display: flex; flex-direction: column; }
+.paper-invest-float-head { display: flex; align-items: center; justify-content: space-between; height: 38px; min-height: 38px; padding: 0 8px 0 12px; background: #070707; border-bottom: 1px solid rgba(255,255,255,.06); cursor: move; user-select: none; touch-action: none; }
+.paper-invest-float-head strong { font-size: 13px; color: #eaecef; }
+.paper-invest-float-head button { width: 26px; height: 26px; border: 0; border-radius: 6px; background: none; color: #848e9c; cursor: pointer; font-size: 20px; }
+.paper-invest-float-head button:disabled { opacity: .4; cursor: default; }
+.paper-invest-float-body { overflow-y: auto; min-height: 0; padding: 8px 12px 18px; }
+.paper-invest button:focus-visible, .paper-invest-float button:focus-visible { outline: 2px solid #7eafff; outline-offset: 2px; }
+
+.paper-invest[hidden] { display: none; }

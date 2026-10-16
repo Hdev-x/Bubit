@@ -20,7 +20,7 @@ import { Chevron } from './SidebarBits';
 
 // 차트 툴바 — 타임프레임·solo 칩·신뢰선·RSI·캡쳐·그리기/지표/차트설정 드롭다운. DesktopApp에서 JSX만 옮김 .
 // 상태는 묶음(draw·indi·view·rsi·rank·solo)으로 받고 첫 줄에서 풀어 쓴다. 본문은 그대로.
-export function ChartToolbar({ draw, indi, view, rsi, rank, solo, user, onLoginClick, isAdmin, visibleTFs, displayedActiveTf, chartRef, handleCaptureChart, interactionBlocked = false }: {
+export function ChartToolbar({ draw, indi, view, rsi, rank, solo, user, onLoginClick, canUseIndicators, visibleTFs, displayedActiveTf, chartRef, handleCaptureChart, interactionBlocked = false }: {
   draw: DrawingState;
   indi: IndicatorState;
   view: ChartViewState;
@@ -29,7 +29,7 @@ export function ChartToolbar({ draw, indi, view, rsi, rank, solo, user, onLoginC
   solo: SoloGroup;
   user: AuthUser | null;
   onLoginClick: () => void;
-  isAdmin: boolean;
+  canUseIndicators: boolean;
   visibleTFs: string[];
   displayedActiveTf: string;
   chartRef: ChartRef;
@@ -195,8 +195,8 @@ export function ChartToolbar({ draw, indi, view, rsi, rank, solo, user, onLoginC
                       )}
                     </div>
 
-                    {/* 지표 드롭다운 — 관리자(ADMIN)에게만 노출 */}
-                    {isAdmin && (
+                    {/* 지표 드롭다운 — 로그인 사용자에게 노출 */}
+                    {canUseIndicators && (
                     <div className="chart-dd" ref={indiRef}>
                       <button
                         className={`chart-gear${indiOpen ? ' active' : ''}`}

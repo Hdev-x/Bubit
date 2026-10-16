@@ -1,0 +1,14 @@
+.release-notes-body { flex: 1; min-height: 0; overflow-y: auto; padding: 30px 32px; overscroll-behavior: contain; }
+.release-notes-entry + .release-notes-entry { margin-top: 32px; padding-top: 32px; border-top: 1px solid #242424; }
+.release-notes-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.release-notes-meta h3 { margin: 0; font-size: 20px; font-weight: 650; }
+.release-notes-meta time { margin-left: auto; color: #929292; font-size: 12px; font-variant-numeric: tabular-nums; }
+.release-notes-badge { padding: 4px 9px; border: 1px solid #343434; border-radius: 6px; background: #202020; color: #e8e9ec; font-size: 11px; font-weight: 600; }
+.release-notes-entry h4 { margin: 18px 0 12px; color: #e8e9ec; font-size: 15px; font-weight: 600; }
+.release-notes-entry ul { display: grid; gap: 9px; margin: 0; padding-left: 18px; color: #b5b5b5; font-size: 13px; line-height: 1.7; word-break: keep-all; overflow-wrap: anywhere; }
+.release-notes-entry li::marker { color: #686868; }
+@media (max-width: 640px) {
+  .release-notes-body { padding: 24px 20px; }
+  .release-notes-meta { gap: 10px; }
+  .release-notes-meta time { flex-basis: 100%; margin-left: 0; }
+}

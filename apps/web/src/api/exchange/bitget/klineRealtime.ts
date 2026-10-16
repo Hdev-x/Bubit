@@ -2,6 +2,7 @@
 // 실시간으로 받는다. 업비트/빗썸은 공개 캔들 WS가 없어 별도(REST 폴링)로 처리.
 // (Binance kline은 지역차단 때문에 백엔드 릴레이로 — coinRealtime.subscribeBinanceKline)
 import type { CandleMessage, Subscription } from '../../server/coinRealtime';
+import { publishRealtimeTicker } from '../../server/coinRealtime';
 
 /** Bitget kline WS — data:[[ts,o,h,l,c,baseVol,...]]. ping/pong 25s. channel은 candle1H 등(DESKTOP_TIMEFRAMES.channel). */
 export function subscribeBitgetKline(symbol: string, isFutures: boolean, channel: string, onCandle: (c: CandleMessage) => void): Subscription {
@@ -18,14 +19,16 @@ export function subscribeBitgetKline(symbol: string, isFutures: boolean, channel
       pingTimer = window.setInterval(() => { if (socket?.readyState === WebSocket.OPEN) socket.send('ping'); }, 25000);
     };
     socket.onmessage = (ev) => {
-      if (typeof ev.data !== 'string' || ev.data === 'pong') return;
-      let d: { data?: unknown };
+      if (closedByClient || typeof ev.data !== 'string' || ev.data === 'pong') return;
+      let d: { data?: unknown; ts?: number };
       try { d = JSON.parse(ev.data); } catch { return; }
       const rows = d.data as string[][] | undefined;
       if (!Array.isArray(rows) || !rows.length) return;
       const r = rows[rows.length - 1]; // 최신(현재) 캔들
-      if (!Array.isArray(r)) return;
-      onCandle({ time: Math.floor(Number(r[0]) / 1000), open: +r[1], high: +r[2], low: +r[3], close: +r[4], volume: +r[5] });
+      if (!Array.isArray(r) || !Number.isFinite(Number(r[4])) || Number(r[4]) <= 0) return;
+      const ts = d.ts == null ? undefined : Number(d.ts);
+      publishRealtimeTicker(`/topic/coin${isFutures ? '-futures' : ''}/${symbol}`, { symbol, price: +r[4], ts });
+      onCandle({ ts, time: Math.floor(Number(r[0]) / 1000), open: +r[1], high: +r[2], low: +r[3], close: +r[4], volume: +r[5] });
     };
     socket.onclose = () => {
       if (pingTimer) clearInterval(pingTimer);

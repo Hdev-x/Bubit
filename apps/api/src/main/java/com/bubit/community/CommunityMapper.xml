@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bubit.community.CommunityMapper">
+    <sql id="displayName">
+        CASE WHEN NULLIF(TRIM(m.nickname), '') IS NULL OR LOWER(TRIM(m.nickname)) = LOWER(TRIM(m.email))
+            THEN '회원' ELSE m.nickname END
+    </sql>
+    <sql id="fields">
+        p.id, p.parent_id, p.scope, p.exchange, p.market, p.symbol, p.title, p.body,
+        p.author, <include refid="displayName"/> AS author_name,
+        CASE WHEN profile.avatar_id IS NOT NULL THEN '/api/profiles/avatars/' || profile.avatar_id ELSE NULL END AS avatar_url,
+        CASE WHEN p.author = #{viewer} THEN TRUE ELSE FALSE END AS owned,
+        EXISTS(SELECT 1 FROM community_likes l WHERE l.post_id = p.id AND l.member_id = #{viewer}) AS liked,
+        (SELECT COUNT(*) FROM community_likes l WHERE l.post_id = p.id) AS like_count,
+        (SELECT COUNT(*) FROM community_posts c WHERE c.parent_id = p.id) AS comment_count,
+        p.image_id, p.created_at, p.updated_at
+    </sql>
+    <sql id="authors">
+        FROM community_posts p JOIN members m ON m.email = p.author
+        LEFT JOIN member_profiles profile ON profile.member_id = m.email
+    </sql>
+    <select id="list" resultType="com.bubit.community.CommunityPost">
+        SELECT <include refid="fields"/> <include refid="authors"/>
+        WHERE p.parent_id IS NULL AND p.scope = #{scope}
+        <if test="scope == 'feed'">AND p.exchange = #{exchange} AND p.market = #{market} AND p.symbol = #{symbol}</if>
+        <if test="query != ''">AND (LOWER(p.title) LIKE #{query} OR LOWER(p.body) LIKE #{query} OR LOWER(<include refid="displayName"/>) LIKE #{query})</if>
+        ORDER BY <if test="sort == 'popular'">like_count DESC,</if> p.id DESC
+        LIMIT 21 OFFSET #{offset}
+    </select>
+    <select id="comments" resultType="com.bubit.community.CommunityPost">
+        SELECT <include refid="fields"/> <include refid="authors"/>
+        WHERE p.parent_id = #{parentId} ORDER BY p.id ASC LIMIT 21 OFFSET #{offset}
+    </select>
+    <select id="find" resultType="com.bubit.community.CommunityPost">
+        SELECT <include refid="fields"/> <include refid="authors"/> WHERE p.id = #{id}
+    </select>
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO community_posts (parent_id, scope, exchange, market, symbol, title, body, author, image_id, image_data)
+        VALUES (#{parentId}, #{scope}, #{exchange}, #{market}, #{symbol}, #{title}, #{body}, #{author}, #{imageId}, #{imageData})
+    </insert>
+    <update id="update">
+        UPDATE community_posts SET title = #{title}, body = #{body}, updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id} AND author = #{author}
+    </update>
+    <delete id="delete">DELETE FROM community_posts WHERE id = #{id} AND author = #{author}</delete>
+    <insert id="like">
+        INSERT INTO community_likes (post_id, member_id) VALUES (#{id}, #{author}) ON CONFLICT DO NOTHING
+    </insert>
+    <delete id="unlike">DELETE FROM community_likes WHERE post_id = #{id} AND member_id = #{author}</delete>
+    <select id="image" resultType="com.bubit.community.CommunityPost">SELECT image_data FROM community_posts WHERE image_id = #{imageId}</select>
+</mapper>

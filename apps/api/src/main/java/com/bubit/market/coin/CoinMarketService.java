@@ -2,7 +2,7 @@ package com.bubit.market.coin;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.web.reactive.function.client.WebClient;
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
@@ -143,17 +143,20 @@ public class CoinMarketService extends AbstractMarketService {
     private final Map<String, Object> precisionLocks = new ConcurrentHashMap<>();
 
     /**
- * 가격 소수 자릿수 — 거래소·상품군별로 따로 캐시한다. 세 조회를 병렬로 돌리고 전체 10초 상한을 둔다
+ * 가격 소수 자릿수 — 거래소·상품군별로 따로 캐시한다. 조회를 병렬로 돌리고 전체 10초 상한을 둔다
  * (예전엔 순차 5+5+10초라 클라이언트 12초 timeout을 넘길 수 있었다). 시간 초과·실패한 부분은 빈 Map(마지막 성공값 유지 규칙 그대로).
 */
     public Map<String, Integer> getPricePrecision() {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(PRECISION_TOTAL_TIMEOUT_SECONDS);
         List<CompletableFuture<Map<String, Integer>>> parts = List.of(
                 CompletableFuture.supplyAsync(() -> precisionPart("price_precision_bitget_USDT-FUTURES", () -> loadBitgetPrecision("USDT-FUTURES"))),
                 CompletableFuture.supplyAsync(() -> precisionPart("price_precision_bitget_USDC-FUTURES", () -> loadBitgetPrecision("USDC-FUTURES"))),
-                CompletableFuture.supplyAsync(() -> precisionPart("price_precision_binance", this::loadBinancePrecision)));
+                CompletableFuture.supplyAsync(() -> precisionPart("price_precision_bitget_SPOT", () -> loadBitgetPrecision("SPOT"))),
+                CompletableFuture.supplyAsync(() -> precisionPart("price_precision_binance", () -> loadBinancePrecision(true))),
+                CompletableFuture.supplyAsync(() -> precisionPart("price_precision_binance_spot", () -> loadBinancePrecision(false))));
         Map<String, Integer> result = new HashMap<>();
         for (CompletableFuture<Map<String, Integer>> f : parts) {
-            try { result.putAll(f.get(PRECISION_TOTAL_TIMEOUT_SECONDS, TimeUnit.SECONDS)); }
+            try { result.putAll(f.get(Math.max(0, deadline - System.nanoTime()), TimeUnit.NANOSECONDS)); }
             catch (Exception e) { log.warn("price-precision 부분 조회 실패/시간 초과: {}", e.toString()); }
         }
         return result;
@@ -183,54 +186,61 @@ public class CoinMarketService extends AbstractMarketService {
         }
     }
 
-    /** Bitget futures contracts(productType 하나) → pricePlace */
+    /** Bitget futures contracts → pricePlace, spot symbols → pricePrecision */
     private PrecisionPart loadBitgetPrecision(String productType) {
         Map<String, Integer> result = new HashMap<>();
-        {
-            try {
-                Object data = bitgetMarketService.getClient().get()
-                        .uri(uriBuilder -> uriBuilder
-                                .path("/api/v2/mix/market/contracts")
-                                .queryParam("productType", productType)
-                                .build())
-                        .retrieve()
-                        .bodyToMono(Object.class)
-                        .block(Duration.ofSeconds(5));
-
-                if (data instanceof Map<?, ?> root) {
-                    Object dataField = ((Map<?, ?>) root).get("data");
-                    if (dataField instanceof List<?> rows) {
-                        for (Object row : rows) {
-                            if (!(row instanceof Map<?, ?> map)) continue;
-                            Object symObj = map.get("symbol");
-                            Object pricePlace = map.get("pricePlace");
-                            if (symObj == null || pricePlace == null) continue;
-                            String symbol = symObj.toString();
-                            if (!symbol.isEmpty()) {
-                                result.put(symbol, Integer.parseInt(pricePlace.toString()));
-                            }
+        boolean futures = !"SPOT".equals(productType);
+        try {
+            Object data = bitgetMarketService.getClient().get()
+                    .uri(uriBuilder -> {
+                        if (futures) {
+                            return uriBuilder.path("/api/v2/mix/market/contracts")
+                                    .queryParam("productType", productType).build();
                         }
+                        return uriBuilder.path("/api/v2/spot/public/symbols").build();
+                    })
+                    .retrieve()
+                    .bodyToMono(Object.class)
+                    .block(Duration.ofSeconds(5));
+
+            if (data instanceof Map<?, ?> root && "00000".equals(root.get("code"))
+                    && root.get("data") instanceof List<?> rows) {
+                for (Object row : rows) {
+                    if (!(row instanceof Map<?, ?> map)) continue;
+                    Object symObj = map.get("symbol");
+                    Object precision = map.get(futures ? "pricePlace" : "pricePrecision");
+                    if (symObj == null || precision == null) continue;
+                    String symbol = symObj.toString();
+                    if (symbol.isEmpty()) continue;
+                    try {
+                        int decimals = Integer.parseInt(precision.toString());
+                        if (decimals < 0) continue;
+                        result.put("BITGET:" + (futures ? "FUTURES:" : "SPOT:") + symbol, decimals);
+                        if (futures) result.put(symbol, decimals);
+                    } catch (NumberFormatException ignored) {
+                        // 잘못된 한 종목 때문에 나머지 정밀도를 잃지 않는다.
                     }
                 }
-            } catch (Exception e) {
-                log.warn("Bitget contracts 조회 실패: productType={}, error={}", productType, e.getMessage());
             }
+        } catch (Exception e) {
+            log.warn("Bitget precision 조회 실패: productType={}, error={}", productType, e.getMessage());
         }
 
         return new PrecisionPart(result, false);
     }
 
-    /** Binance futures exchangeInfo → PRICE_FILTER tickSize (guard 경유, 차단 중 raw 호출 금지) */
-    private PrecisionPart loadBinancePrecision() {
+    /** Binance spot/futures exchangeInfo → PRICE_FILTER tickSize (guard 경유, 차단 중 raw 호출 금지) */
+    private PrecisionPart loadBinancePrecision(boolean futures) {
         Map<String, Integer> result = new HashMap<>();
         boolean stale = false;
         try {
-            BinanceRestGuard.Result meta = binanceMarketService.getBinanceFuturesExchangeInfoWithMeta(); // guard 경유 — 차단 중 raw 호출 금지
+            BinanceRestGuard.Result meta = futures ? binanceMarketService.getBinanceFuturesExchangeInfoWithMeta()
+                    : binanceMarketService.getBinanceSpotExchangeInfoWithMeta();
             stale = meta.stale();
             Object data = meta.data();
 
             if (data instanceof Map<?, ?> root) {
-                Object symbolsField = ((Map<?, ?>) root).get("symbols");
+                Object symbolsField = root.get("symbols");
                 if (symbolsField instanceof List<?> symbols) {
                     for (Object s : symbols) {
                         if (!(s instanceof Map<?, ?> sMap)) continue;
@@ -245,22 +255,28 @@ public class CoinMarketService extends AbstractMarketService {
                             Object tsObj = fMap.get("tickSize");
                             String tickSize = tsObj != null ? tsObj.toString() : "";
                             if (!tickSize.isEmpty()) {
-                                result.put("BN_" + symbol, tickSizeToDecimals(tickSize));
+                                Integer decimals = tickSizeToDecimals(tickSize);
+                                if (decimals == null) continue;
+                                result.put("BINANCE:" + (futures ? "FUTURES:" : "SPOT:") + symbol, decimals);
+                                if (futures) result.put("BN_" + symbol, decimals);
                             }
                         }
                     }
                 }
             }
         } catch (Exception e) {
-            log.warn("Binance futures exchangeInfo 조회 실패: {}", e.getMessage());
+            log.warn("Binance {} exchangeInfo 조회 실패: {}", futures ? "futures" : "spot", e.getMessage());
         }
 
         return new PrecisionPart(result, stale);
     }
 
-    private int tickSizeToDecimals(String tickSize) {
-        String stripped = tickSize.replaceAll("0+$", "");
-        int dot = stripped.indexOf('.');
-        return dot == -1 ? 0 : stripped.length() - dot - 1;
+    private Integer tickSizeToDecimals(String tickSize) {
+        try {
+            BigDecimal tick = new BigDecimal(tickSize);
+            return tick.signum() > 0 ? Math.max(0, tick.stripTrailingZeros().scale()) : null;
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 }

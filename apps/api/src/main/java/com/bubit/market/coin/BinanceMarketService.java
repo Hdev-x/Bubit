@@ -68,7 +68,8 @@ public class BinanceMarketService extends AbstractMarketService {
     }
 
     private static void configureLargeResponseBuffer(ClientCodecConfigurer codecs) {
-        codecs.defaultCodecs().maxInMemorySize(2 * 1024 * 1024);
+        // Spot exchangeInfo는 permissionSets를 제외해도 6MB를 넘는다.
+        codecs.defaultCodecs().maxInMemorySize(8 * 1024 * 1024);
     }
 
     public Object getBinanceSpotTickers() {
@@ -264,15 +265,25 @@ public class BinanceMarketService extends AbstractMarketService {
 
     /** exchangeInfo + stale 여부(차단·실패로 마지막 값을 돌려줬는지). price-precision이 stale을 성공으로 재캐시하지 않게.*/
     public BinanceRestGuard.Result getBinanceFuturesExchangeInfoWithMeta() {
-        String key = "fut-exchangeInfo";
+        return exchangeInfo(true);
+    }
+
+    public BinanceRestGuard.Result getBinanceSpotExchangeInfoWithMeta() {
+        return exchangeInfo(false);
+    }
+
+    private BinanceRestGuard.Result exchangeInfo(boolean futures) {
+        String key = futures ? "fut-exchangeInfo" : "spot-exchangeInfo";
+        WebClient client = futures ? binanceFuturesClient : binanceSpotClient;
+        String path = futures ? "/fapi/v1/exchangeInfo" : "/api/v3/exchangeInfo?showPermissionSets=false";
         try {
-            return guard.getWithMeta(key, EXCHANGE_INFO_TTL_MS, Long.MAX_VALUE, () -> binanceFuturesClient.get()
-                    .uri("/fapi/v1/exchangeInfo")
+            return guard.getWithMeta(key, EXCHANGE_INFO_TTL_MS, Long.MAX_VALUE, () -> client.get()
+                    .uri(path)
                     .retrieve()
                     .bodyToMono(Object.class)
                     .block(Duration.ofSeconds(10)), Collections.emptyMap());
         } catch (Exception e) {
-            log.error("❌ Binance Futures exchangeInfo 조회 실패: {}", e.getMessage());
+            log.error("❌ Binance {} exchangeInfo 조회 실패: {}", futures ? "Futures" : "Spot", e.getMessage());
             return new BinanceRestGuard.Result(guard.staleOr(key, Collections.emptyMap()), true);
         }
     }

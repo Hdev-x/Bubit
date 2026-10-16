@@ -56,6 +56,8 @@ export function SymbolRow({
 }) {
   // 원화 거래소(업비트·빗썸): 현재가에 '원' + 거래대금 조/억 표기
   const isKrw = ticker.quoteSymbol === 'KRW';
+  const priceReady = Number.isFinite(ticker.last) && ticker.last > 0;
+  const changeReady = Number.isFinite(ticker.changeRate);
   return (
     <div className={`wm-row${editMode ? ' wm-row-edit' : ''}`} role="button" tabIndex={0} onClick={editMode ? undefined : onClick} {...(editMode ? dragProps : {})}>
       {editMode && (
@@ -72,8 +74,8 @@ export function SymbolRow({
         <span>{isKrw ? formatVolumeKrw(ticker.volume) : formatVolume(ticker.volume)}</span>
       </div>
       <div className="wm-row-price">
-        <strong>{formatPriceWithDecimals(ticker.last, decimals)}{isKrw ? '원' : ''}</strong>
-        <span className={ticker.changeRate >= 0 ? 'up' : 'down'}>{ticker.changeRate >= 0 ? '+' : ''}{(ticker.changeRate * 100).toFixed(2)}%</span>
+        <strong>{priceReady ? `${formatPriceWithDecimals(ticker.last, decimals)}${isKrw ? '원' : ''}` : '—'}</strong>
+        <span className={changeReady ? (ticker.changeRate >= 0 ? 'up' : 'down') : undefined}>{changeReady ? `${ticker.changeRate >= 0 ? '+' : ''}${(ticker.changeRate * 100).toFixed(2)}%` : '—'}</span>
       </div>
       {editMode ? (
         <button type="button" className="wm-row-remove" onClick={(ev) => { ev.stopPropagation(); onRemove?.(); }} aria-label="관심 해제">

@@ -29,10 +29,13 @@ import './CoinChartPage.css';
 import { isRecord } from '../../../shared/utils/guards';
 import { EXCHANGES, type ExchangeId } from '../../../shared/constants/exchanges';
 import { getDrawingStorageKeys } from '../../../chart/drawingStorage';
+import { INDICATORS_OFF, MA_OFF, pivotOff } from '../../../chart/indicators/visibility';
 
 type Props = {
   active?: boolean; // 차트 화면이 떠 있을 때만 실시간 캔들 구독·카운트다운 타이머 작동
   routeActive?: boolean;
+  canUseIndicators?: boolean;
+  onLogin?: () => void;
   symbol: string;
   onSelectSymbol: (symbol: string) => void;
   productType?: string;
@@ -190,7 +193,7 @@ function getBucketTime(timestamp: number, granularity: string): number {
   }
 }
 
-export default function CoinChartPage({ active = true, routeActive = true, symbol, onSelectSymbol, productType, exchange = 'BITGET', tickDecimals = 2, onExchangeChange, onProductTypeChange, focusTracker }: Props) {
+export default function CoinChartPage({ active = true, routeActive = true, canUseIndicators = false, onLogin, symbol, onSelectSymbol, productType, exchange = 'BITGET', tickDecimals = 2, onExchangeChange, onProductTypeChange, focusTracker }: Props) {
   const isBinance = exchange === 'BINANCE';
 
   const handleSelectFixed = (sym: string, ex: 'BITGET' | 'BINANCE', futures: boolean) => {
@@ -200,12 +203,8 @@ export default function CoinChartPage({ active = true, routeActive = true, symbo
   };
   const isFutures = !!productType;
   
-  const { precisionMap, getTickDecimals } = usePricePrecision(tickDecimals);
-  const actualTickDecimals = useMemo(() => {
-    if (precisionMap.size === 0) return tickDecimals;
-    const key = (isBinance && isFutures) ? 'BN_' + symbol : symbol;
-    return getTickDecimals(key);
-  }, [getTickDecimals, precisionMap, isBinance, isFutures, symbol, tickDecimals]);
+  const { getTickDecimals } = usePricePrecision(tickDecimals, exchange, isFutures ? 'futures' : 'spot');
+  const actualTickDecimals = getTickDecimals(symbol);
 
   const loadCandles = useCandleLoader({ symbol, productType, exchange });
   const [hoveredCandle, setHoveredCandle] = useState<{ key: string; candle: Candle | null } | null>(null);
@@ -253,6 +252,7 @@ export default function CoinChartPage({ active = true, routeActive = true, symbo
     '3D': { showOB: false, showOBBox: false, showFVG: false, showCE: false, showEQ: false },
     '1D': { showOB: false, showOBBox: false, showFVG: false, showCE: false, showEQ: false },
   }, true);
+  const effectiveIndicators = canUseIndicators ? indicatorSettings : INDICATORS_OFF;
   const desiredPriceKey = priceKey(exchange, isFutures, symbol);
   const {
     mtfCandles,
@@ -261,7 +261,7 @@ export default function CoinChartPage({ active = true, routeActive = true, symbo
     status: mtfStatus,
     missing: missingMtf,
     retryMtf,
-  } = useMtfCandles(symbol, indicatorSettings, loadCandles, true, desiredPriceKey);
+  } = useMtfCandles(symbol, effectiveIndicators, loadCandles, true, desiredPriceKey);
   const [obOptions] = useState<OBOptions>(DEFAULT_OB_OPTIONS);
 
   // 차트 테마 (localStorage 우선, 쿠키 폴백)
@@ -516,10 +516,10 @@ export default function CoinChartPage({ active = true, routeActive = true, symbo
           interactionBlocked={interactionBlocked}
           chartTheme={chartTheme}
           tickDecimals={displayTickDecimals}
-          indicatorSettings={visiblePacket?.indicatorSettings ?? indicatorSettings}
+          indicatorSettings={canUseIndicators ? (visiblePacket?.indicatorSettings ?? indicatorSettings) : INDICATORS_OFF}
           indicatorLayers={
             (['1M', '1W', '3D', '1D'] as TFKey[])
-              .filter(tf => !!displayMtfCandles[tf])
+              .filter(tf => canUseIndicators && !!displayMtfCandles[tf])
               .map(tf => ({ tf, candles: displayMtfCandles[tf]! } satisfies IndicatorLayer))
           }
           currentTfSeconds={displaySelection ? getIntervalSeconds(displaySelection.timeframe.granularity) : 0}
@@ -531,9 +531,9 @@ export default function CoinChartPage({ active = true, routeActive = true, symbo
             setCanUndo(status.canUndo);
             setCanRedo(status.canRedo);
           } : undefined}
-          maSettings={visiblePacket?.maSettings ?? maSettings}
-          bbSetting={visiblePacket?.bbSetting ?? bbSetting}
-          pivotSetting={visiblePacket?.pivotSetting ?? pivotSetting}
+          maSettings={canUseIndicators ? (visiblePacket?.maSettings ?? maSettings) : MA_OFF}
+          bbSetting={canUseIndicators ? (visiblePacket?.bbSetting ?? bbSetting) : { ...bbSetting, show: false }}
+          pivotSetting={canUseIndicators ? (visiblePacket?.pivotSetting ?? pivotSetting) : pivotOff(pivotSetting)}
           focusTracker={displayFocusTracker}
           highlightTracker={displayHighlightTracker}
         />
@@ -555,7 +555,7 @@ export default function CoinChartPage({ active = true, routeActive = true, symbo
       />
 
       <IndicatorSheet
-        isOpen={isIndicatorSheetOpen}
+        isOpen={canUseIndicators && isIndicatorSheetOpen}
         onClose={() => setIsIndicatorSheetOpen(false)}
         settings={indicatorSettings}
         onChange={setIndicatorSettings}
@@ -594,9 +594,9 @@ export default function CoinChartPage({ active = true, routeActive = true, symbo
 
             {/* 보조지표 */}
             <button
-              className={`tool-btn ${isIndicatorSheetOpen || Object.values(indicatorSettings).some(s => isRecord(s) && (s.showOB || s.showOBBox || s.showFVG || s.showCE || s.showEQ)) ? 'active' : ''}`}
+              className={`tool-btn ${canUseIndicators && (isIndicatorSheetOpen || Object.values(indicatorSettings).some(s => isRecord(s) && (s.showOB || s.showOBBox || s.showFVG || s.showCE || s.showEQ))) ? 'active' : ''}`}
               title="보조지표"
-              onClick={() => setIsIndicatorSheetOpen(prev => !prev)}
+              onClick={() => { if (!canUseIndicators) { onLogin?.(); return; } setIsIndicatorSheetOpen(prev => !prev); }}
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M4 4v16h16" strokeWidth="1.5"/>

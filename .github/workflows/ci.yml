@@ -49,4 +49,4 @@ jobs:
           java-version: 21
       - uses: gradle/actions/setup-gradle@v4
       - run: ./gradlew test --no-daemon
-      - run: ./gradlew bootWar -x test --no-daemon
+      - run: ./gradlew bootJar -x test --no-daemon

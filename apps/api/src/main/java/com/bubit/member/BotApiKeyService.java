@@ -4,6 +4,7 @@ import com.bubit.common.security.EncryptionUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Set;
@@ -21,10 +22,15 @@ public class BotApiKeyService {
             "MAIN", "SOL", "NEAR", "LTC", "WLD", "INJ", "BTC", "1000SHIB");
 
     /** 새 API 키 저장 (제한/중복 검사 → 암호화 → 슬롯 활성키 해제 → DB INSERT) */
+    @Transactional(rollbackFor = Exception.class)
     public BotApiKeyDTO saveKey(String memberId, BotApiKeyDTO dto, boolean isAdmin) throws Exception {
         String exchange = dto.getExchange() != null ? dto.getExchange() : "BITGET";
         String botTarget = dto.getBotTarget() != null ? dto.getBotTarget() : "MAIN";
         String plainApiKey = dto.getApiKey();
+
+        if (!"BITGET".equals(exchange)) {
+            throw new IllegalArgumentException("현재 API 연결은 Bitget만 지원합니다.");
+        }
 
         if (!VALID_TARGETS.contains(botTarget)) {
             throw new IllegalArgumentException("유효하지 않은 봇 슬롯입니다: " + botTarget);
@@ -67,9 +73,13 @@ public class BotApiKeyService {
     }
 
     /** 지정한 키를 활성화하고 같은 슬롯의 나머지 키는 비활성화 */
+    @Transactional(rollbackFor = Exception.class)
     public boolean activateKey(String memberId, Integer keyId) throws Exception {
         BotApiKeyDTO key = mapper.selectByIdAndMemberId(keyId, memberId);
         if (key == null) return false;
+        if (!"BITGET".equals(key.getExchange())) {
+            throw new IllegalArgumentException("현재 API 연결은 Bitget만 지원합니다.");
+        }
 
         mapper.deactivateByMemberExchangeAndTarget(memberId, key.getExchange(), key.getBotTarget());
         mapper.activateByIdAndMemberId(keyId, memberId);

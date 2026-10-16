@@ -64,6 +64,8 @@ public class BotApiKeyController {
                 return ResponseEntity.status(404).body(Map.of("error", "해당 API 키를 찾을 수 없습니다."));
             }
             return ResponseEntity.ok(Map.of("success", true));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         } catch (Exception e) {
             log.error("API 키 활성화 실패", e);
             return ResponseEntity.internalServerError().body(Map.of("error", "API 키 활성화 중 오류가 발생했습니다."));

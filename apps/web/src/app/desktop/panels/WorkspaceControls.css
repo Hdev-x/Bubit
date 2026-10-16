@@ -1,0 +1,7 @@
+.workspace-controls { display: flex; gap: 4px; flex-shrink: 0; }
+.workspace-controls button {
+  border: 1px solid transparent; border-radius: 8px; background: transparent;
+  color: var(--text3); padding: 7px 9px; font: inherit; font-size: 12px; cursor: pointer;
+}
+.workspace-controls button[aria-pressed="true"] { color: var(--text); border-color: var(--border); background: var(--surface); }
+.workspace-controls button:hover, .workspace-controls button:focus-visible { color: var(--text); background: var(--surface2); }
