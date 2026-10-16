@@ -72,8 +72,7 @@ export default function DesktopApp({ user, onLoginClick, onLogout, onUserChange 
   }, []);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  // 로그인 시 내투자, 비로그인 시 공개 섹션(실시간 마켓)으로 시작
-  const [section, setSection] = useState<Section>(user ? 'invest' : 'market');
+  const [section, setSection] = useState<Section>('market');
   const [krw, setKrw] = useState(true);
   const [investTab, setInvestTab] = useState<InvestTab>('선물');
   const [walletOpen, setWalletOpen] = useState(false);

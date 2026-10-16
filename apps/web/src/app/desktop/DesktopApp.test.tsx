@@ -70,6 +70,15 @@ describe('DesktopApp chart state', () => {
   });
   afterEach(async () => { await cleanupRenderComponents(); vi.clearAllTimers(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
+  it.each([user, null])('로그인 여부와 관계없이 첫 사이드바는 실시간으로 연다 (%j)', async (initialUser) => {
+    const view = await renderComponent(<DesktopApp {...props} user={initialUser} />);
+    await flushRaf(); await flushRaf();
+    expect(view.container.querySelector('.sidebar-panel.open .sidebar-title-wrap')?.textContent).toBe('실시간');
+    expect(controls.mainActive).toBe(false);
+    await click(view.container, '내 투자');
+    expect(view.container.querySelector('.sidebar-title-wrap')?.textContent).toContain('내 투자');
+  });
+
   it('호가·커뮤니티 토글 조합에 따라 보조 패널과 차트 폭을 바꾸며 차트는 유지한다', async () => {
     const view = await renderComponent(<DesktopApp {...props} />);
     expect(view.container.querySelector('[data-testid="orderbook"]')).not.toBeNull();
@@ -92,9 +101,10 @@ describe('DesktopApp chart state', () => {
     expect(controls.mainActive).toBe(false);
   });
 
-  it('모의투자·주문 닫힘으로 시작하고 설정·다른 섹션을 다녀와도 선택과 화면을 보존한다', async () => {
+  it('내 투자 진입 시 모의투자·주문 닫힘으로 시작하고 설정·다른 섹션을 다녀와도 선택과 화면을 보존한다', async () => {
     const view = await renderComponent(<DesktopApp {...props} />);
     await flushRaf(); await flushRaf();
+    await click(view.container, '내 투자');
     const paper = view.container.querySelector('[data-testid="paper-invest"]');
     expect(view.container.querySelector('.sidebar-title-wrap .paper-toggle.on')).not.toBeNull();
     expect(paper?.hasAttribute('hidden')).toBe(false);
