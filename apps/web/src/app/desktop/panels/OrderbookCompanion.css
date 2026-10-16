@@ -5,7 +5,7 @@
   flex:1;
   padding:4px 0 8px;
   overflow:hidden;
-  background:var(--surface);
+  background:#000;
   color:var(--text);
   border-top:1px solid var(--border);
   font-size:11px;
