@@ -47,7 +47,6 @@ export default function LoginPage({ onSuccess, onBrowse }: Props) {
                 <img src={botzMark} alt="" style={styles.logo} />
               </span>
               <span style={styles.brandText}>Bubit</span>
-              <span className="brand-beta-badge">Beta</span>
             </div>
             {onBrowse && <button type="button" style={styles.linkButton} onClick={onBrowse}>둘러보기</button>}
           </header>

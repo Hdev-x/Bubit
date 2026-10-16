@@ -205,7 +205,6 @@ export default function CoinListPage({ active = true, selectedSymbol, onSelectSy
           <div style={{ width: '48px' }} />
           <div className="header-center botz-brand brand-mark">
             <img className="at-brand-logo" src={botzMark} alt="" />
-            <span className="brand-beta-badge">Beta</span>
           </div>
           <ProfileMenu
             user={user}

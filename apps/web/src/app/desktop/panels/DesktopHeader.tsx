@@ -23,7 +23,6 @@ export function DesktopHeader({ user, onLoginClick, onLogout, onProfileClick, ch
           <header className="header">
             <div className="brand-mark">
               <img className="header-logo" src={botzMark} alt="Bubit" />
-              <span className="brand-beta-badge">Beta</span>
             </div>
             <div className="header-right">
               {children}

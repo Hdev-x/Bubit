@@ -38,7 +38,6 @@ export default function DesktopSignup({ onSignup, onBackToLogin, onClose }: { on
       <header className="header" style={{ background: 'transparent', borderBottom: 'none' }}>
         <div className="brand-mark">
           <img className="header-logo" src={botzMark} alt="Bubit" />
-          <span className="brand-beta-badge">Beta</span>
         </div>
         {onClose && <button type="button" onClick={onClose} style={styles.close} aria-label="닫기">✕</button>}
       </header>

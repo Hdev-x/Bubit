@@ -17,21 +17,6 @@
   flex-shrink: 0;
 }
 
-.brand-beta-badge {
-  position: absolute;
-  left: calc(100% + 4px);
-  top: 50%;
-  transform: translateY(-50%);
-  padding: 0 4px;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text3, #8a8c90);
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 16px;
-  white-space: nowrap;
-}
-
 .skeleton-shimmer {
   background: linear-gradient(100deg, #101012 20%, #1c1d20 42%, #101012 64%);
   background-size: 220% 100%;
