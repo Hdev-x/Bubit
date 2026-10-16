@@ -1,4 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { version } from '../../../package.json';
 import type { AuthUser } from '../../api/server/authApi';
 import MyPageDialog, { type SettingsSection } from '../shared/account/MyPageDialog';
 import { PaperInvestSection } from './panels/PaperInvestSection';
@@ -532,7 +533,7 @@ export default function DesktopApp({ user, onLoginClick, onLogout, onUserChange 
 
       <footer className="app-footer">
         <span>© 2026 Bubit · Desktop</span>
-        <span>v0.1</span>
+        <span>v{version}</span>
       </footer>
 
       {user && settingsSection && <MyPageDialog user={user} initialSection={settingsSection} onUserChange={onUserChange} onClose={() => setSettingsSection(null)} />}
