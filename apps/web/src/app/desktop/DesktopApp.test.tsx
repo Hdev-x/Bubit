@@ -96,7 +96,7 @@ describe('DesktopApp chart state', () => {
     const view = await renderComponent(<DesktopApp {...props} />);
     await flushRaf(); await flushRaf();
     const paper = view.container.querySelector('[data-testid="paper-invest"]');
-    expect(view.container.querySelector('.sidebar-invest-controls .paper-toggle.on')).not.toBeNull();
+    expect(view.container.querySelector('.sidebar-title-wrap .paper-toggle.on')).not.toBeNull();
     expect(paper?.hasAttribute('hidden')).toBe(false);
     expect(controls.mainActive).toBe(false);
     expect(view.container.querySelector('[data-testid="paper-order"]')).toBeNull();

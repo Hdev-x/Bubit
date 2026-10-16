@@ -9,5 +9,3 @@
 
 .sidebar-invest-view { display: flex; flex: 1; min-height: 0; overflow: hidden; }
 .sidebar-invest-view[hidden] { display: none; }
-
-.sidebar-invest-controls { display: flex; flex-shrink: 0; gap: 8px; padding: 0 16px 12px; }
