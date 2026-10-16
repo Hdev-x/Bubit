@@ -31,10 +31,13 @@
   padding: 0 20px;
   color: #8a8c90;
   font-size: 11px;
+  font-variant-numeric: tabular-nums;
   flex-shrink: 0;
 }
 
-.app-footer span { font-variant-numeric: tabular-nums; }
+.app-version { align-self: stretch; border: 0; border-radius: 4px; padding: 0 4px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.app-version:hover { color: #e8e9ec; text-decoration: underline; text-underline-offset: 3px; }
+.app-version:focus-visible { outline: 2px solid #7c9ee8; outline-offset: -2px; }
 
 /* 헤더 내부 아이템은 사이드바 펼침으로 인한 너비 축소를 흡수 */
 .header-right { flex-shrink: 0; }

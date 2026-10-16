@@ -8,6 +8,7 @@ import type { TrackerState } from '../../shared/types/bot';
 import type { MarketChartRef } from '../../chart/MarketChart';
 import { cleanupRenderComponents, renderComponent } from '../../test/renderComponent';
 import DesktopApp from './DesktopApp';
+import { version } from '../../../package.json';
 
 const controls = vi.hoisted(() => ({
   candlesKey: 'BINANCE|F|BTCUSDT|1h', decimals: 2, chartMounts: 0, paperMounts: 0,
@@ -47,6 +48,7 @@ vi.mock('./panels/PaperInvestSection', () => ({ PaperInvestSection: ({ orderOpen
   return <div data-testid="paper-invest" hidden={!visible} data-active={active}>{visible && orderOpen && <div data-testid="paper-order"><button onClick={onCloseOrder}>close-paper-order</button></div>}</div>;
 } }));
 vi.mock('../shared/account/MyPageDialog', () => ({ default: ({ initialSection, onClose }: { initialSection: string; onClose: () => void }) => <div data-testid="settings-dialog" data-section={initialSection}><button onClick={onClose}>close-settings</button></div> }));
+vi.mock('../shared/updates/ReleaseNotesDialog', () => ({ default: ({ onClose }: { onClose: () => void }) => <div data-testid="updates-dialog"><button onClick={onClose}>close-updates</button></div> }));
 vi.mock('./panels/OrderbookCompanion', () => ({ OrderbookCompanion: () => <div data-testid="companion" /> }));
 vi.mock('./panels/InvestSection', () => ({ InvestSection: () => <div data-testid="real-invest" /> }));
 vi.mock('./panels/MarketPanel', () => ({ MarketPanel: () => null }));
@@ -77,6 +79,16 @@ describe('DesktopApp chart state', () => {
     expect(controls.mainActive).toBe(false);
     await click(view.container, '내 투자');
     expect(view.container.querySelector('.sidebar-title-wrap')?.textContent).toContain('내 투자');
+  });
+
+  it.each([user, null])('푸터 업데이트 내역을 열고 닫아도 차트를 유지한다 (%j)', async (initialUser) => {
+    const view = await renderComponent(<DesktopApp {...props} user={initialUser} />);
+    expect(view.container.querySelector('[data-testid="updates-dialog"]')).toBeNull();
+    await click(view.container, `v${version}`);
+    expect(view.container.querySelector('[data-testid="updates-dialog"]')).not.toBeNull();
+    await click(view.container, 'close-updates');
+    expect(view.container.querySelector('[data-testid="updates-dialog"]')).toBeNull();
+    expect(controls.chartMounts).toBe(1);
   });
 
   it('호가·커뮤니티 토글 조합에 따라 보조 패널과 차트 폭을 바꾸며 차트는 유지한다', async () => {

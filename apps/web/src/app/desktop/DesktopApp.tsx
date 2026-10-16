@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { version } from '../../../package.json';
 import type { AuthUser } from '../../api/server/authApi';
 import MyPageDialog, { type SettingsSection } from '../shared/account/MyPageDialog';
+import ReleaseNotesDialog from '../shared/updates/ReleaseNotesDialog';
 import { PaperInvestSection } from './panels/PaperInvestSection';
 import { useCoinLogos } from './panels/marketShared';
 import { WatchlistPanel } from './panels/WatchlistPanel';
@@ -56,6 +57,7 @@ export default function DesktopApp({ user, onLoginClick, onLogout, onUserChange 
   user: AuthUser | null; onLoginClick: () => void; onLogout: () => void; onUserChange: (user: AuthUser) => void;
 }) {
   const [settingsSection, setSettingsSection] = useState<SettingsSection | null>(null);
+  const [updatesOpen, setUpdatesOpen] = useState(false);
   const [paperMode, setPaperMode] = useState(true);
   const [paperOrderOpen, setPaperOrderOpen] = useState(false);
   const [showOrderbook, setShowOrderbook] = usePersistentState('web_show_orderbook', true);
@@ -533,8 +535,9 @@ export default function DesktopApp({ user, onLoginClick, onLogout, onUserChange 
 
       <footer className="app-footer">
         <span>© 2026 Bubit · Desktop</span>
-        <span>v{version}</span>
+        <button type="button" className="app-version" aria-label={`v${version} 업데이트 내역`} aria-haspopup="dialog" onClick={() => setUpdatesOpen(true)}>v{version}</button>
       </footer>
+      {updatesOpen && <ReleaseNotesDialog onClose={() => setUpdatesOpen(false)} />}
 
       {user && settingsSection && <MyPageDialog user={user} initialSection={settingsSection} onUserChange={onUserChange} onClose={() => setSettingsSection(null)} />}
 

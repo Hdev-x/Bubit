@@ -7,6 +7,7 @@
 | [`apps/web/package.json`](../apps/web/package.json)의 `version` | 제품 버전 정본. 화면 푸터도 이 값을 사용 |
 | [README](../README.md)·[사용 가이드](USER-GUIDE.md) | 현재 사용할 수 있는 기능과 시작 방법 |
 | [CHANGELOG](../CHANGELOG.md) | 사용자 관점의 버전별 변경 이력 정본 |
+| [`releaseNotes.ts`](../apps/web/src/app/shared/updates/releaseNotes.ts) | 푸터 업데이트 팝업에 표시하는 변경 이력 요약 |
 | [GitHub Releases](https://github.com/Hdev-x/Bubit/releases) | 태그에 대응하는 버전과 CHANGELOG의 해당 내용을 게시 |
 | [기술 문제 해결 기록](TROUBLESHOOTING.md) | 특정 문제의 원인·해결·검증을 개발자 관점에서 설명 |
 | Issue·PR | 개별 요구 사항, 변경 내용과 검증 근거 |
@@ -21,6 +22,7 @@ PR을 merge하는 것은 소스 반영입니다. 버전 태그·Release 발행�
 - 혼합 변경은 가장 높은 등급으로 배포당 한 번만 올립니다. 같은 내용 재배포와 rollback은 대상 산출물의 기존 버전을 유지합니다.
 - `apps/web`에서 `npm version <version> --no-git-tag-version --ignore-scripts` 등으로 `package.json`의 `version`과 `package-lock.json`의 최상위·`packages[""]` 버전을 함께 맞춥니다. 개발 원본에서 export한다면 `ops/public-source/overlay/apps/web/package-lock.json`의 두 버전 필드도 맞추되 Public 의존성 차이를 보존합니다.
 - 변경 이력과 배포 증거에 제품 버전·commit·산출물 식별자를 기록합니다. 버전 증가는 승인된 배포에 포함되며, CI 실행·merge·태그·GitHub Release 발행 승인으로 확대하지 않습니다. 아래 태그 규칙은 발행 승인 후 적용합니다.
+- 배포 버전의 CHANGELOG와 `apps/web/src/app/shared/updates/releaseNotes.ts`를 함께 갱신합니다. 화면용 내역은 최신 버전을 맨 위에 두고 `package.json` 버전과 일치시키며, 과거 배포 내역은 보존합니다.
 - Beta 태그는 `v0.1.0-beta`, 수정 버전은 `v0.1.1-beta`처럼 사용합니다. 기능 단위가 커지면 `v0.2.0-beta`처럼 올립니다. 정식 버전은 `v1.0.0`부터 시작합니다.
 - Beta에서도 호환성이 바뀌면 설정·데이터·API·사용법에 미치는 영향과 필요한 조치를 변경 이력에 명시합니다. 이미 발행한 태그는 다른 commit으로 옮기거나 재사용하지 않습니다.
 - 위 태그 번호는 **예시**이며 발행 이력이 아닙니다. API의 Gradle 버전은 산출물 메타데이터이므로 제품 버전과의 대응은 배포 증거에 함께 기록합니다.

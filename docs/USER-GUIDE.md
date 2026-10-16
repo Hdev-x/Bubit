@@ -40,4 +40,4 @@ Bitget 자격증명을 등록할 때는 조회에 필요한 권한만 사용하�
 
 ## 업데이트와 문의
 
-[변경 이력](../CHANGELOG.md)에서 업데이트를 확인하고, 문제가 있거나 개선을 제안하려면 [지원 안내](../SUPPORT.md)를 참고하세요. 버전 발행 후에는 [GitHub Releases](https://github.com/Hdev-x/Bubit/releases)에도 해당 버전의 변경 사항을 게시합니다.
+PC 화면 아래의 버전을 누르면 로그인 없이 버전별 업데이트 내역을 볼 수 있습니다. 자세한 내용은 [변경 이력](../CHANGELOG.md), 문제가 있거나 개선을 제안하려면 [지원 안내](../SUPPORT.md)를 참고하세요. 버전 발행 후에는 [GitHub Releases](https://github.com/Hdev-x/Bubit/releases)에도 해당 버전의 변경 사항을 게시합니다.
