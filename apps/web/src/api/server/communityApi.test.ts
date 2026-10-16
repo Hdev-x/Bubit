@@ -22,14 +22,14 @@ afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); FakeSocket.instance
 describe('community subscription', () => {
   it('shares a socket between posts and replies and stops retries after the last listener closes', () => {
     vi.useFakeTimers(); vi.stubGlobal('WebSocket', FakeSocket);
-    const context = { scope: 'feed' as const, exchange: 'bitget', market: 'spot', symbol: 'BTCUSDT' };
+    const context = { scope: 'board' as const, exchange: '', market: '', symbol: '' };
     const first = vi.fn(); const second = vi.fn();
     const closeFirst = subscribeCommunity(context, first);
     const closeSecond = subscribeCommunity(context, second);
     expect(FakeSocket.instances).toHaveLength(1);
     const socket = FakeSocket.instances[0]; socket.onopen?.();
     socket.onmessage?.({ data: 'CONNECTED\nversion:1.2\n\n\0' });
-    expect(socket.send).toHaveBeenCalledWith('SUBSCRIBE\nid:community\ndestination:/topic/community/feed/bitget/spot/BTCUSDT\n\n\0');
+    expect(socket.send).toHaveBeenCalledWith('SUBSCRIBE\nid:community\ndestination:/topic/community/board\n\n\0');
     expect(first).toHaveBeenCalledOnce(); expect(second).toHaveBeenCalledOnce();
     closeFirst(); expect(socket.close).not.toHaveBeenCalled();
     socket.onmessage?.({ data: 'MESSAGE\n\n{"changed":true}\0' });

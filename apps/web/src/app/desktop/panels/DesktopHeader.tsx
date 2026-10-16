@@ -67,7 +67,7 @@ export function DesktopHeader({ user, onLoginClick, onLogout, onProfileClick, ch
                       </div>
                     </div>
                     <div className="header-menu-divider" />
-                    {onProfileClick && <button className="header-menu-item" role="menuitem" onClick={() => { setMenuOpen(false); onProfileClick(); }}>마이페이지</button>}
+                    {onProfileClick && <button className="header-menu-item" role="menuitem" onClick={() => { setMenuOpen(false); onProfileClick(); }}>설정</button>}
                     <button className="header-menu-item" role="menuitem" onClick={onLogout}>
                       로그아웃
                     </button>

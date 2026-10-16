@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AuthUser } from '../../api/server/authApi';
+import type { SettingsSection } from '../shared/account/MyPageDialog';
 import { useCoinLogos } from './panels/marketShared';
 import { WatchlistPanel } from './panels/WatchlistPanel';
 import { useMainTrade } from '../../hooks/account/useMainTrade';
@@ -44,7 +45,7 @@ import './DesktopApp.css';
 
 const MyPageDialog = lazy(() => import('../shared/account/MyPageDialog'));
 const CommunityPanel = lazy(() => import('../shared/community/CommunityPanel').then(module => ({ default: module.CommunityPanel })));
-const PaperTradingDialog = lazy(() => import('./panels/PaperTradingDialog').then(module => ({ default: module.PaperTradingDialog })));
+const PaperInvestSection = lazy(() => import('./panels/PaperInvestSection').then(module => ({ default: module.PaperInvestSection })));
 
 // ── 데스크톱 웹 — 모바일 훅/컴포넌트를 그대로 재사용해 같은 데이터를 다룸(화면만 다름) ──
 // 실데이터: 내 투자(선물=useMainTrade, 현물=useSpotTrade) · 호가(useOrderbook) · 차트(useCoinCandles)
@@ -54,8 +55,9 @@ const PaperTradingDialog = lazy(() => import('./panels/PaperTradingDialog').then
 export default function DesktopApp({ user, onLoginClick, onLogout, onUserChange }: {
   user: AuthUser | null; onLoginClick: () => void; onLogout: () => void; onUserChange: (user: AuthUser) => void;
 }) {
-  const [profileOpen, setProfileOpen] = useState(false);
-  const [paperOpen, setPaperOpen] = useState(false);
+  const [settingsSection, setSettingsSection] = useState<SettingsSection | null>(null);
+  const [paperMode, setPaperMode] = useState(false);
+  const [paperOrderOpen, setPaperOrderOpen] = useState(false);
   const [showOrderbook, setShowOrderbook] = usePersistentState('web_show_orderbook', true);
   const [showCommunity, setShowCommunity] = usePersistentState('web_show_community', true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -121,7 +123,7 @@ export default function DesktopApp({ user, onLoginClick, onLogout, onUserChange 
   }, [indiOpen, chartSetOpen, drawOpen, indiRef, chartSetRef, drawRef, setIndiOpen, setChartSetOpen, setDrawOpen]);
 
   // ── 실데이터 — 총자산/포지션 (모바일과 동일 세션) ──
-  const { data: trade } = useMainTrade(!!user && section === 'invest' && sidebarOpen);
+  const { data: trade } = useMainTrade(!!user && section === 'invest' && sidebarOpen && !paperMode);
   const usdKrw = useUsdKrw();
   const { hasKey, positions, available, equity } = trade;
   // 모바일과 동일: 데이터(equity>0) 도착 전까지 스켈레톤, 빈 계정은 1500ms 폴백
@@ -368,7 +370,7 @@ export default function DesktopApp({ user, onLoginClick, onLogout, onUserChange 
   const marketActive = section === 'market' && sidebarOpen;
 
   // ── 실데이터 — 현물 보유자산 (투자탭 '현물' 선택 시) ──
-  const spotActive = !!user && section === 'invest' && investTab === '현물' && sidebarOpen;
+  const spotActive = !!user && section === 'invest' && investTab === '현물' && sidebarOpen && !paperMode;
   const { data: spot } = useSpotTrade(spotActive);
   const spotPriceSymbols = spot.holdings
     .filter((h) => h.coin !== 'USDT' && h.coin !== 'USDC')
@@ -435,7 +437,7 @@ export default function DesktopApp({ user, onLoginClick, onLogout, onUserChange 
         <div className="app-main">
           <DesktopHeader
             user={user} onLoginClick={onLoginClick} onLogout={onLogout}
-            onProfileClick={() => { setMenuOpen(false); setProfileOpen(true); }}
+            onProfileClick={() => { setMenuOpen(false); setSettingsSection('profile'); }}
             menuOpen={menuOpen} setMenuOpen={setMenuOpen} menuRef={menuRef}
             effWatchMode={effWatchMode} setWatchMode={setWatchMode}
           >
@@ -443,7 +445,6 @@ export default function DesktopApp({ user, onLoginClick, onLogout, onUserChange 
               showOrderbook={showOrderbook} showCommunity={showCommunity}
               onToggleOrderbook={() => setShowOrderbook(value => !value)}
               onToggleCommunity={() => setShowCommunity(value => !value)}
-              onOpenPaper={() => user ? setPaperOpen(true) : onLoginClick()}
             />
           </DesktopHeader>
 
@@ -504,6 +505,20 @@ export default function DesktopApp({ user, onLoginClick, onLogout, onUserChange 
         <Sidebar
           sidebarOpen={sidebarOpen} section={section} sectionLocked={sectionLocked}
           krw={krw} setKrw={setKrw} marketActive={marketActive} handleSelectChart={handleSelectChart}
+          paper={{
+            enabled: paperMode,
+            orderOpen: paperOrderOpen,
+            onToggle: () => user ? setPaperMode(value => !value) : onLoginClick(),
+            onToggleOrder: () => setPaperOrderOpen(value => !value),
+            onOpenSettings: () => setSettingsSection('paper'),
+            content: user && sidebarOpen && section === 'invest' && !settingsSection ? (
+              <Suspense fallback={<p role="status">모의계좌 불러오는 중…</p>}>
+                <PaperInvestSection key={user.username} user={user} symbol={CHART_SYMBOL} exchange={chartSel.exchange}
+                  isFutures={chartIsFutures} price={livePrice} krw={krw} usdKrw={usdKrw} orderOpen={paperOrderOpen}
+                  onCloseOrder={() => setPaperOrderOpen(false)} onSelectChart={handleSelectChart} />
+              </Suspense>
+            ) : null,
+          }}
           invest={{
             main: { trade, hasKey, positions, available, unrealTotal, mainVal, approx, mainSkeleton, selPos },
             spot: { spot, spotSorted, spotTotal, spotValueOf, spotPriceOf, spotSkeleton },
@@ -524,8 +539,7 @@ export default function DesktopApp({ user, onLoginClick, onLogout, onUserChange 
       </footer>
 
       <Suspense fallback={<div className="workspace-dialog-loading" role="status">불러오는 중…</div>}>
-        {user && profileOpen && <MyPageDialog user={user} onUserChange={onUserChange} onClose={() => setProfileOpen(false)} />}
-        {user && paperOpen && <PaperTradingDialog user={user} symbol={CHART_SYMBOL} exchange={chartSel.exchange} isFutures={chartIsFutures} price={livePrice} onClose={() => setPaperOpen(false)} />}
+        {user && settingsSection && <MyPageDialog user={user} initialSection={settingsSection} onUserChange={onUserChange} onClose={() => setSettingsSection(null)} />}
       </Suspense>
 
       {/* 관심 미니 시세창 — float 모드: 화면 위에 떠있는 드래그 창 */}

@@ -7,29 +7,26 @@ type Props = {
 };
 
 export function CommunityComposer({ context, parentId, post, onSaved, onCancel }: Props) {
-  const [title, setTitle] = useState(post?.title ?? '');
   const [body, setBody] = useState(post?.body ?? '');
   const [image, setImage] = useState<File | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
-  const isBoard = context.scope === 'board' && parentId == null;
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (pending || !body.trim() || (isBoard && !title.trim())) return;
+    if (pending || !body.trim()) return;
     setPending(true); setError('');
     try {
-      if (post) await editCommunityPost(post.id, title, body);
-      else await createCommunityPost(context, title, body, image, parentId);
-      setTitle(''); setBody(''); setImage(null);
+      if (post) await editCommunityPost(post.id, post.title, body);
+      else await createCommunityPost(context, '', body, image, parentId);
+      setBody(''); setImage(null);
       onSaved();
     } catch (failure) { setError(failure instanceof Error ? failure.message : '저장하지 못했습니다.'); }
     finally { setPending(false); }
   }
 
-  const compact = !isBoard && !post;
+  const compact = !post;
   return <form className={`community-composer${compact ? ' community-composer-compact' : ''}`} onSubmit={submit}>
-    {isBoard && <input aria-label="글 제목" placeholder="제목" maxLength={120} value={title} onChange={event => setTitle(event.target.value)} disabled={pending} />}
     <div className="community-input">
       <textarea className="community-textarea" aria-label={parentId ? '댓글 내용' : '글 내용'} placeholder={parentId ? '댓글을 남겨보세요' : '메시지를 입력하세요...'} maxLength={2000}
         value={body} onChange={event => setBody(event.target.value)} disabled={pending} rows={compact ? 1 : 4}
@@ -56,7 +53,7 @@ export function CommunityComposer({ context, parentId, post, onSaved, onCancel }
       {image && <button type="button" className="community-attachment" onClick={() => setImage(null)} disabled={pending}>{image.name} ×</button>}
       <span className="community-char-count">{body.length}/2000</span>
       {onCancel && <button type="button" onClick={onCancel} disabled={pending}>취소</button>}
-      {!compact && <button type="submit" className="community-primary" disabled={pending || !body.trim() || (isBoard && !title.trim())}>{pending ? '저장 중…' : post ? '수정' : '등록'}</button>}
+      {!compact && <button type="submit" className="community-primary" disabled={pending || !body.trim()}>{pending ? '저장 중…' : post ? '수정' : '등록'}</button>}
     </div>
     {compact && image && <span className="community-attached-name">{image.name}</span>}
     {error && <p className="community-error" role="alert">{error}</p>}

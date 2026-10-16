@@ -114,8 +114,7 @@ public class CommunityService {
     private static void setContent(CommunityPost post, String title, String body) {
         title = title == null ? "" : title.trim();
         body = body == null ? "" : body.trim();
-        if (body.isEmpty() || body.length() > 2000 || title.length() > 120
-                || (post.getParentId() == null && "board".equals(post.getScope()) && title.isEmpty())) throw badRequest();
+        if (body.isEmpty() || body.length() > 2000 || title.length() > 120) throw badRequest();
         post.setTitle(post.getParentId() == null && "board".equals(post.getScope()) ? title : "");
         post.setBody(body);
     }

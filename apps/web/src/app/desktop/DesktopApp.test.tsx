@@ -15,13 +15,13 @@ const controls = vi.hoisted(() => ({
   priceStatus: 'ready' as 'loading' | 'ready' | 'error', primaryReady: true, candleClose: 1, missing: [] as string[],
   candles: [{ time: 1, open: 1, high: 1, low: 1, close: 1, volume: 1 }], mtf: {},
   retryCandles: vi.fn(), retryMtf: vi.fn(), rangeChange: vi.fn(),
-  focusTimeWindow: vi.fn(),
+  focusTimeWindow: vi.fn(), mainActive: false,
   resetPriceAutoScale: vi.fn(), raf: new Map<number, FrameRequestCallback>(), nextRaf: 1,
 }));
 
 vi.mock('../../hooks/ui/usePersistentState', () => ({ usePersistentState: <T,>(_key: string, initial: T) => useState(initial) }));
 vi.mock('./panels/marketShared', () => ({ useCoinLogos: () => ({}) }));
-vi.mock('../../hooks/account/useMainTrade', () => ({ useMainTrade: () => ({ data: { hasKey: false, positions: [], orders: [], planOrders: [], available: 0, equity: 0 } }) }));
+vi.mock('../../hooks/account/useMainTrade', () => ({ useMainTrade: (active: boolean) => { controls.mainActive = active; return { data: { hasKey: false, positions: [], orders: [], planOrders: [], available: 0, equity: 0 } }; } }));
 vi.mock('../../hooks/account/useSpotTrade', () => ({ useSpotTrade: () => ({ data: { holdings: [], orders: [], usdtAvailable: 0, hasKey: false } }) }));
 vi.mock('../../hooks/market/useUsdKrw', () => ({ useUsdKrw: () => 1380 }));
 vi.mock('../../hooks/market/useRealtimePrices', () => ({ useRealtimePrices: () => ({}) }));
@@ -42,8 +42,11 @@ vi.mock('./panels/ChartStage', () => ({ ChartStage: ({ chartRef, data, sel }: { 
 vi.mock('./panels/SymbolHeader', () => ({ SymbolHeader: () => null }));
 vi.mock('./panels/OrderbookPanel', () => ({ OrderbookPanel: () => <div data-testid="orderbook" /> }));
 vi.mock('../shared/community/CommunityPanel', () => ({ CommunityPanel: () => <div data-testid="community" /> }));
+vi.mock('./panels/PaperInvestSection', () => ({ PaperInvestSection: ({ orderOpen, onCloseOrder }: { orderOpen: boolean; onCloseOrder: () => void }) => <div data-testid="paper-invest">{orderOpen && <div data-testid="paper-order"><button onClick={onCloseOrder}>close-paper-order</button></div>}</div> }));
+vi.mock('../shared/account/MyPageDialog', () => ({ default: ({ initialSection, onClose }: { initialSection: string; onClose: () => void }) => <div data-testid="settings-dialog" data-section={initialSection}><button onClick={onClose}>close-settings</button></div> }));
 vi.mock('./panels/OrderbookCompanion', () => ({ OrderbookCompanion: () => <div data-testid="companion" /> }));
-vi.mock('./panels/Sidebar', () => ({ Sidebar: () => null }));
+vi.mock('./panels/InvestSection', () => ({ InvestSection: () => <div data-testid="real-invest" /> }));
+vi.mock('./panels/MarketPanel', () => ({ MarketPanel: () => null }));
 vi.mock('./panels/IconRail', () => ({ IconRail: () => null }));
 
 const user: AuthUser = { username: 'tester', role: 'USER' };
@@ -79,12 +82,36 @@ describe('DesktopApp chart state', () => {
     expect(controls.chartMounts).toBe(1);
   });
 
-  it('비로그인 모의투자 진입은 주문 화면 대신 로그인을 요청한다', async () => {
-    props.onLoginClick.mockClear();
+  it('비로그인에게 내 투자 전용 모의투자 버튼을 노출하지 않는다', async () => {
     const view = await renderComponent(<DesktopApp {...props} user={null} />);
+    expect(view.container.querySelector('.paper-toggle')).toBeNull();
+    expect(view.container.querySelector('[data-testid="paper-invest"]')).toBeNull();
+    expect(controls.mainActive).toBe(false);
+  });
+
+  it('내 투자 캡슐로 모의계좌를 전환하고 실제계좌 조회를 멈춘다', async () => {
+    const view = await renderComponent(<DesktopApp {...props} />);
+    await flushRaf(); await flushRaf();
+    expect(view.container.querySelector('[data-testid="real-invest"]')).not.toBeNull();
+    expect(controls.mainActive).toBe(true);
     await click(view.container, '모의투자');
-    expect(props.onLoginClick).toHaveBeenCalledOnce();
-    expect(view.container.querySelector('.paper-trading-dialog')).toBeNull();
+    expect(view.container.querySelector('.paper-toggle.on')).not.toBeNull();
+    expect(view.container.querySelector('[data-testid="real-invest"]')).toBeNull();
+    expect(view.container.querySelector('[data-testid="paper-invest"]')).not.toBeNull();
+    expect(controls.mainActive).toBe(false);
+    await click(view.container, '주문');
+    expect(view.container.querySelector('[data-testid="paper-order"]')).not.toBeNull();
+    await click(view.container, 'close-paper-order');
+    expect(view.container.querySelector('[data-testid="paper-order"]')).toBeNull();
+    await click(view.container, '초기화');
+    expect(view.container.querySelector('[data-testid="paper-invest"]')).toBeNull();
+    expect(view.container.querySelector('[data-testid="settings-dialog"]')?.getAttribute('data-section')).toBe('paper');
+    await click(view.container, 'close-settings');
+    expect(view.container.querySelector('[data-testid="paper-invest"]')).not.toBeNull();
+    await click(view.container, '모의투자');
+    expect(view.container.querySelector('[data-testid="real-invest"]')).not.toBeNull();
+    expect(controls.mainActive).toBe(true);
+    expect(controls.chartMounts).toBe(1);
   });
 
   it('같은 symbol 선택은 solo를 유지하고 다른 symbol 선택만 해제한다', async () => {

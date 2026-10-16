@@ -4,7 +4,7 @@ import AssetsPage from './pages/AssetsPage';
 import CoinChartPage from './pages/CoinChartPage';
 import CoinListPage from './pages/CoinListPage';
 import MobileTradePage from './pages/MobileTradePage';
-import MyPageDialog from '../shared/account/MyPageDialog';
+import MyPageDialog, { type SettingsSection } from '../shared/account/MyPageDialog';
 import { useMobileSession } from './hooks/useMobileSession';
 import StrategyComingSoon from '../../shared/ui/StrategyComingSoon';
 import LoginPage from './pages/LoginPage';
@@ -28,7 +28,7 @@ function getRoute(hash: string): AppRoute {
 export default function App() {
   const { authChecked, user, setUser, logout } = useMobileSession();
   const [loginRequested, setLoginRequested] = useState(false);
-  const [myPageOpen, setMyPageOpen] = useState(false);
+  const [settingsSection, setSettingsSection] = useState<SettingsSection | null>(null);
 
   function handleLogin(nextUser: AuthUser) {
     setUser(nextUser);
@@ -38,7 +38,7 @@ export default function App() {
   function handleLogout() {
     tradeRequestSeqRef.current++;
     setTradeError(null);
-    setMyPageOpen(false);
+    setSettingsSection(null);
     logout();
     if (route !== '/' && route !== '/chart') navigate('/');
   }
@@ -199,7 +199,7 @@ export default function App() {
 
   const privateRoute = route === '/orders' || route === '/strategy' || route === '/assets';
   const showLogin = !user && (loginRequested || privateRoute);
-  const pageActive = visible && !showLogin && !myPageOpen;
+  const pageActive = visible && !showLogin && !settingsSection;
 
   return (
     <div className="app-frame">
@@ -218,7 +218,7 @@ export default function App() {
           onTickDecimalsChange={setSelectedTickDecimals}
           onLogout={handleLogout}
           user={user}
-          onAccount={() => setMyPageOpen(true)}
+          onAccount={() => setSettingsSection('profile')}
           onLogin={() => setLoginRequested(true)}
         />}
       </div>
@@ -241,6 +241,7 @@ export default function App() {
       <div style={{ display: user && route === '/orders' ? 'block' : 'none', height: '100%' }}>
         {user && visitedRoutes.has('/orders') && <MobileTradePage
           user={user}
+          onOpenPaperSettings={() => setSettingsSection('paper')}
           symbol={selectedSymbol}
           active={route === '/orders' && pageActive}
           onSelectSymbol={setSelectedSymbol}
@@ -270,7 +271,7 @@ export default function App() {
         </div>
       )}
 
-      {myPageOpen && user && <MyPageDialog user={user} onClose={() => setMyPageOpen(false)} onUserChange={setUser} />}
+      {settingsSection && user && <MyPageDialog user={user} initialSection={settingsSection} onClose={() => setSettingsSection(null)} onUserChange={setUser} />}
 
       <BottomTabBar activeRoute={route} onNavigate={navigate} />
     </div>

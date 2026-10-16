@@ -4,9 +4,9 @@ import { PaperTradingPanel } from '../../shared/paper/PaperTradingPanel';
 import OrderPage from './OrderPage';
 import './MobileTradePage.css';
 
-type Props = ComponentProps<typeof OrderPage> & { user: AuthUser };
+type Props = ComponentProps<typeof OrderPage> & { user: AuthUser; onOpenPaperSettings: () => void };
 
-export default function MobileTradePage({ user, ...props }: Props) {
+export default function MobileTradePage({ user, onOpenPaperSettings, ...props }: Props) {
   const [paper, setPaper] = useState(false);
   return (
     <div className="mobile-trade-page">
@@ -16,7 +16,7 @@ export default function MobileTradePage({ user, ...props }: Props) {
       </nav>
       {paper ? (
         <section className="mobile-paper-trading">
-          {props.active && <PaperTradingPanel user={user} symbol={props.symbol} exchange="BITGET" market={props.tradeMarketReq?.market ?? 'futures'} />}
+          {props.active && <PaperTradingPanel user={user} symbol={props.symbol} exchange="BITGET" market={props.tradeMarketReq?.market ?? 'futures'} onOpenSettings={onOpenPaperSettings} />}
         </section>
       ) : <OrderPage {...props} />}
     </div>

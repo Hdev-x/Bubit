@@ -28,7 +28,7 @@ export function CommunityPostCard({ post, context, user, onLogin, onChanged }: P
     <div className="community-bubble">
       <header className="community-post-author">
         <strong>{post.authorName}</strong>
-        <time dateTime={post.createdAt} title={new Date(post.createdAt).toLocaleString('ko-KR')}>{new Date(post.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })}</time>
+        <time dateTime={post.createdAt}>{new Date(post.createdAt).toLocaleString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })}</time>
         <button type="button" className="community-post-more" aria-label="메시지 메뉴" aria-expanded={showActions} onClick={() => setShowActions(!showActions)}>···</button>
       </header>
       {showActions && <div className="community-post-actions">

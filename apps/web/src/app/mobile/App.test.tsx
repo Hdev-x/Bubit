@@ -22,8 +22,8 @@ vi.mock('../../hooks/ui/usePageVisible', () => ({ useDocumentVisible: () => true
 vi.mock('../../api/server/coinRealtime', () => ({ listenRealtimeTicker: (topic: string, listener: (ticker: { symbol: string; price: number; changeRate?: number }) => void) => { state.tickerListeners.set(topic, listener); return { close: () => state.tickerListeners.delete(topic) }; } }));
 vi.mock('./components/BottomTabBar', () => ({ default: ({ onNavigate }: { onNavigate: (route: string) => void }) => <button onClick={() => onNavigate('/')}>go-market</button> }));
 vi.mock('./pages/LoginPage', () => ({ default: ({ onSuccess, onBrowse }: { onSuccess: (user: AuthUser) => void; onBrowse: () => void }) => <div data-testid="login"><button onClick={() => onSuccess({ username: 'tester', role: 'USER' })}>login</button><button onClick={onBrowse}>browse</button></div> }));
-vi.mock('../shared/account/MyPageDialog', () => ({ default: () => null }));
-vi.mock('../shared/paper/PaperTradingPanel', () => ({ PaperTradingPanel: () => <output data-testid="paper" /> }));
+vi.mock('../shared/account/MyPageDialog', () => ({ default: ({ initialSection, onClose }: { initialSection: string; onClose: () => void }) => <div data-testid="settings" data-section={initialSection}><button onClick={onClose}>close-settings</button></div> }));
+vi.mock('../shared/paper/PaperTradingPanel', () => ({ PaperTradingPanel: ({ onOpenSettings }: { onOpenSettings: () => void }) => <div data-testid="paper"><button onClick={onOpenSettings}>paper-settings</button></div> }));
 vi.mock('./pages/AssetsPage', () => ({ default: () => <output data-testid="assets" /> }));
 vi.mock('../../shared/ui/StrategyComingSoon', () => ({ default: () => <output data-testid="strategy" /> }));
 vi.mock('./pages/CoinChartPage', () => ({ default: ({ active, routeActive, symbol, productType, exchange }: { active: boolean; routeActive: boolean; symbol: string; productType?: string; exchange: string }) => <output data-testid="chart" data-active={String(active)} data-route-active={String(routeActive)} data-symbol={symbol} data-product={productType} data-exchange={exchange} /> }));
@@ -222,6 +222,17 @@ describe('mobile App market navigation', () => {
     await act(async () => oldTicker({ symbol: 'BTCUSDT', price: 999 }));
     expect(document.title).toContain('ETHUSDT 200');
     expect([...state.tickerListeners.keys()].some(topic => topic.includes('/coin'))).toBe(false);
+  });
+
+  it('모의투자에서 설정을 열면 조회를 멈추고 닫은 뒤 계좌를 새로 불러온다', async () => {
+    const view = await renderComponent(<App />);
+    await click(view.container, 'open-trade');
+    await click(view.container, '모의투자');
+    await click(view.container, 'paper-settings');
+    expect(view.container.querySelector('[data-testid="paper"]')).toBeNull();
+    expect(view.container.querySelector('[data-testid="settings"]')?.getAttribute('data-section')).toBe('paper');
+    await click(view.container, 'close-settings');
+    expect(view.container.querySelector('[data-testid="paper"]')).not.toBeNull();
   });
 
   it('모의투자 선택 시 계좌 화면을 닫고 화면을 떠나면 모의 조회도 멈춘다', async () => {

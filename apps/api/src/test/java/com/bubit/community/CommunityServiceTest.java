@@ -51,6 +51,23 @@ class CommunityServiceTest {
         verify(messages).convertAndSend(eq("/topic/community/feed/bitget/spot/BTCUSDT"), eq(java.util.Map.of("changed", true)));
     }
 
+    @Test void globalChatAcceptsMessagesWithoutTitlesAndPublishesOnSharedTopic() {
+        var stored = post(); stored.setId(2L); stored.setScope("board");
+        when(mapper.find(2, "member")).thenReturn(stored);
+        doAnswer(invocation -> {
+            CommunityPost created = invocation.getArgument(0);
+            assertEquals("board", created.getScope()); assertEquals("", created.getTitle());
+            assertEquals("", created.getExchange()); assertEquals("", created.getMarket()); assertEquals("", created.getSymbol());
+            assertEquals("공통 채팅 메시지", created.getBody());
+            created.setId(2L);
+            return null;
+        }).when(mapper).insert(any());
+        service.create("board", "", "", "", null, "", "공통 채팅 메시지", null, "member");
+        verifyNoInteractions(messages);
+        TransactionSynchronizationManager.getSynchronizations().forEach(sync -> sync.afterCommit());
+        verify(messages).convertAndSend(eq("/topic/community/board"), eq(java.util.Map.of("changed", true)));
+    }
+
     @Test void publicPostDoesNotSerializeMemberIdentifierOrImageBytes() throws Exception {
         CommunityPost post = post(); post.setImageData(new byte[]{1, 2, 3});
         var json = new ObjectMapper().valueToTree(post);

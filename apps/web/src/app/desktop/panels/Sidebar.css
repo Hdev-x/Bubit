@@ -1,0 +1,10 @@
+.paper-toggle, .paper-order-open, .paper-reset-btn {
+  padding: 2px 8px; border-radius: 999px; background: transparent;
+  border: 1px solid #ffffff24; color: #8a8c90; font-size: 11px; font-weight: 600;
+  cursor: pointer; white-space: nowrap;
+}
+.paper-toggle:hover, .paper-order-open:hover { color: #d4d6da; border-color: #ffffff47; }
+.paper-toggle.on { background: #f0b90b; border-color: #f0b90b; color: #101114; }
+.paper-order-open.on { background: #fff; border-color: #fff; color: #101114; }
+.paper-reset-btn { border-color: #f6465d66; color: var(--down, #f6465d); }
+.paper-reset-btn:hover { background: #f6465d1f; border-color: var(--down, #f6465d); }

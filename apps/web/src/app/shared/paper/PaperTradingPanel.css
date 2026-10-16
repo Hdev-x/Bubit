@@ -1,39 +1,82 @@
-.paper-panel { color: var(--text-primary, #e5e7eb); padding: 18px; font-size: 13px; }
+.paper-panel { color: var(--text-primary, #eaecef); padding: 18px; font-size: 13px; }
 .paper-panel h2, .paper-panel h3, .paper-panel p, .paper-panel dl { margin: 0; }
 .paper-panel h2 { font-size: 17px; margin-bottom: 4px; }
-.paper-panel h3 { font-size: 13px; margin: 22px 0 12px; }
-.paper-panel h3 span { color: #8b95a5; margin-left: 4px; }
-.paper-panel button, .paper-panel input, .paper-panel select { font: inherit; }
-.paper-panel button { color: inherit; border: 1px solid #303642; border-radius: 8px; background: #20242c; padding: 7px 10px; cursor: pointer; }
+.paper-panel h3 { font-size: 12px; margin: 16px 0 8px; }
+.paper-panel h3 span { color: #848e9c; margin-left: 4px; }
+.paper-panel button, .paper-panel input { font: inherit; }
+.paper-panel button { color: inherit; border: 1px solid #303642; border-radius: 6px; background: #202126; padding: 7px 10px; cursor: pointer; }
 .paper-panel button:disabled { opacity: .45; cursor: default; }
-.paper-panel button:focus-visible, .paper-panel input:focus-visible, .paper-panel select:focus-visible { outline: 2px solid #7eafff; outline-offset: 2px; }
-.paper-panel-header, .paper-ticket-heading, .paper-orders li, .paper-position > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.paper-panel .paper-muted { color: #8b95a5; line-height: 1.6; }
-.paper-balances { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 20px 0; }
-.paper-balances dt, .paper-position dt { color: #8b95a5; font-size: 12px; }
-.paper-balances dd { margin: 6px 0 0; font-size: 18px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.paper-balances small { font-size: 10px; font-weight: 400; }
-.paper-ticket { display: grid; gap: 12px; padding: 16px; border: 1px solid #303642; border-radius: 12px; }
-.paper-ticket-heading { flex-wrap: wrap; }
-.paper-ticket-heading span { color: #8b95a5; font-size: 11px; }
-.paper-ticket label { display: grid; gap: 6px; color: #a8b0bd; font-size: 12px; min-width: 0; }
-.paper-ticket input, .paper-ticket select { width: 100%; box-sizing: border-box; min-width: 0; border: 1px solid #303642; color: #e5e7eb; background: #15181e; padding: 10px; border-radius: 8px; }
-.paper-ticket input:disabled { opacity: .65; }
-.paper-ticket-fields, .paper-order-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.paper-percentages { display: flex; gap: 6px; }
-.paper-percentages button { flex: 1; padding: 5px; font-size: 11px; }
-.paper-panel .paper-long { background: #146d58; border-color: #146d58; color: white; }
-.paper-panel .paper-short { background: #ad3e4d; border-color: #ad3e4d; color: white; }
-.paper-panel .paper-terms { font-size: 11px; margin-top: 12px; }
+.paper-panel button:focus-visible, .paper-panel input:focus-visible { outline: 2px solid #7eafff; outline-offset: 2px; }
+.paper-panel-header, .paper-position > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.paper-panel-header { margin-bottom: 12px; }
+.paper-panel .paper-muted { color: #848e9c; line-height: 1.6; }
+/* AutoTrade 6708f771 WebPaperOrder의 배치·색상. 모바일 주문 CSS와 충돌하지 않도록 모의투자 이름으로 한정한다. */
+.paper-ticket { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.paper-ticket-symbol { display: flex; align-items: center; gap: 6px; min-width: 0; padding: 3px 0 8px; }
+.paper-ticket-symbol strong { font-size: 13px; line-height: 20px; }
+.paper-ticket-logo { width: 20px; height: 20px; border-radius: 50%; overflow: hidden; flex-shrink: 0; background: #000; display: inline-flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 800; }
+.paper-ticket-logo img { width: 100%; height: 100%; object-fit: cover; }
+.paper-ticket-perp { font-size: 9px; line-height: 16px; color: #b6b9be; border: 1px solid #35383d; padding: 0 3px; border-radius: 3px; }
+.paper-ticket-exchange { display: inline-flex; align-items: center; gap: 3px; color: #00f0ff; font-size: 10px; font-weight: 600; }
+.paper-ticket-exchange img { width: 11px; height: 11px; }
+.paper-ticket-pills { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.paper-ticket-pills button, .paper-ticket-pills > span { background: #202126; border: 0; border-radius: 6px; height: 26px; padding: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; }
+.paper-ticket-tabs { display: grid; grid-template-columns: 1fr 1fr; background: #181a20; padding: 2px; border-radius: 6px; }
+.paper-ticket-tabs button { background: none; border: 0; color: #848e9c; height: 29px; padding: 0; border-radius: 4px; font-size: 12.5px; font-weight: 700; }
+.paper-ticket-tabs button.active { background: #4a4e56; color: #fff; }
+.paper-ticket-tabs span { font-size: 10px; margin-left: 3px; }
+.paper-ticket-form { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.paper-ticket-price-line { display: flex; align-items: stretch; gap: 6px; }
+.paper-ticket-price-line .paper-ticket-input { flex: 1; min-width: 0; }
+.paper-ticket-price-line .paper-ticket-price-type { flex-shrink: 0; padding: 0 16px; background: #181a20; color: #8a8c90; border: 1.5px solid transparent; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.paper-ticket-price-line .paper-ticket-price-type.active { color: #fff; border-color: rgba(255,255,255,.85); }
+.paper-ticket-input { display: flex; align-items: center; background: #202126; border-radius: 6px; height: 37px; padding: 0 10px; gap: 6px; min-width: 0; }
+.paper-ticket-input input { flex: 1; min-width: 0; background: none; border: 0; color: #fff; font-size: 13px; font-weight: 700; width: 100%; text-align: left; padding: 0; }
+.paper-ticket-input input::placeholder { color: #5e6673; }
+.paper-ticket-input.locked input { opacity: .45; }
+.paper-ticket-input > span { font-size: 13px; font-weight: 700; }
+.paper-ticket-input .paper-ticket-input-label { color: #848e9c; font-weight: 600; }
+.paper-percentages { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.paper-percentages button { border: 0; height: 24px; padding: 0; font-size: 12px; font-weight: 600; }
+.paper-ticket-balances { display: grid; gap: 4px; padding: 2px 0; }
+.paper-ticket-balances > div { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; }
+.paper-ticket-balances dt { color: #848e9c; }
+.paper-ticket-balances dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+.paper-panel .paper-long, .paper-panel .paper-short { border: 0; height: 40px; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.paper-panel .paper-long { background: var(--up, #0ecb81); }
+.paper-panel .paper-short { background: var(--down, #f6465d); }
+.paper-long strong, .paper-short strong { font-size: 13px; font-weight: 700; }
+.paper-long span, .paper-short span { font-size: 10px; opacity: .8; }
+.paper-ticket-empty { padding: 14px 0; text-align: center; }
 .paper-panel .paper-error { color: #ff8f99; line-height: 1.6; padding: 10px 0; }
-.paper-reset-confirm { padding: 12px; background: #292028; border-radius: 8px; margin-bottom: 12px; }
-.paper-reset-confirm p { margin-bottom: 10px; }
-.paper-reset-confirm button + button { margin-left: 8px; }
-.paper-positions, .paper-orders { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
-.paper-position, .paper-orders li { border: 1px solid #303642; border-radius: 10px; padding: 12px; }
-.paper-position > div span, .paper-orders span { color: #8b95a5; font-size: 11px; }
+.paper-positions, .paper-orders { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.paper-position { border: 1px solid #303642; border-radius: 8px; padding: 12px; }
+.paper-position > div span { color: #848e9c; font-size: 11px; }
 .paper-position dl { display: grid; gap: 6px; margin: 12px 0; }
 .paper-position dl div { display: flex; justify-content: space-between; gap: 10px; }
+.paper-position dt { color: #848e9c; font-size: 12px; }
 .paper-position dd { margin: 0; font-variant-numeric: tabular-nums; }
 .paper-position > button { width: 100%; }
-.paper-orders li > div { display: grid; gap: 5px; }
+.paper-orders { border-top: 1px solid rgba(255,255,255,.07); padding-top: 5px; gap: 0; }
+.paper-orders li { display: flex; align-items: center; gap: 6px; padding: 4px 0; font-size: 12px; }
+.paper-orders li > span:first-child { font-weight: 700; }
+.paper-orders .paper-order-price { color: #b6b9be; margin-left: auto; font-variant-numeric: tabular-nums; }
+.paper-orders button { width: 24px; height: 24px; padding: 0; background: none; border: 0; color: #8a8c90; font-size: 18px; }
+.paper-settings { padding: 0; }
+.paper-balances { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 24px 0; }
+.paper-balances dt { color: #848e9c; font-size: 12px; }
+.paper-balances dd { margin: 6px 0 0; font-size: 20px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.paper-balances small { font-size: 11px; font-weight: 400; }
+.paper-settings-details { display: grid; gap: 16px; }
+.paper-settings-details > div { display: flex; justify-content: space-between; gap: 16px; }
+.paper-settings-details dt { color: #848e9c; }
+.paper-settings-details dd { margin: 0; text-align: right; }
+.paper-settings-details small { color: #848e9c; font-size: 11px; display: block; margin-top: 4px; }
+.paper-panel .paper-terms { font-size: 11px; margin-top: 24px; }
+.paper-settings-reset { border-top: 1px solid #24262a; margin-top: 24px; padding-top: 20px; }
+.paper-settings-reset h3 { margin: 0 0 8px; }
+.paper-settings-reset > button { margin-top: 14px; }
+.paper-reset-confirm { padding: 12px; background: #21171b; border-radius: 8px; margin-top: 14px; }
+.paper-reset-confirm p { margin-bottom: 10px; }
+.paper-reset-confirm button + button { margin-left: 8px; }
+@media (hover: hover) { .paper-ticket-pills button:hover, .paper-percentages button:hover { background: #2b2f36; } .paper-orders button:hover { color: var(--down, #f6465d); } }

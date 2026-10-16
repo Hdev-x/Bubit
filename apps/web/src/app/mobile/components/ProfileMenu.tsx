@@ -57,7 +57,7 @@ export default function ProfileMenu({ user, onLogout, onAccount, onLogin }: Prop
               onAccount?.();
             }}
           >
-            마이페이지 <span className="pm-arrow">›</span>
+            설정 <span className="pm-arrow">›</span>
           </button>
 
           <button
