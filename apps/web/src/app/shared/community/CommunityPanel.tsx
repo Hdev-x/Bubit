@@ -29,6 +29,16 @@ function CommunityFeed({ user, onLogin }: { user: AuthUser | null; onLogin: () =
 
   useLayoutEffect(() => {
     const feed = feedRef.current;
+    if (!feed) return;
+    const observer = new ResizeObserver(() => {
+      if (atBottom.current) feed.scrollTop = feed.scrollHeight;
+    });
+    observer.observe(feed);
+    return () => observer.disconnect();
+  }, []);
+
+  useLayoutEffect(() => {
+    const feed = feedRef.current;
     if (!feed || !data) return;
     if (forceBottom.current || atBottom.current) {
       feed.scrollTop = feed.scrollHeight;

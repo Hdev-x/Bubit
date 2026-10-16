@@ -13,14 +13,16 @@ function messagePage(ids: number[], hasMore = false): CommunityPage {
 
 function scrollMetrics(feed: HTMLDivElement) {
   let height = 1000;
+  let viewport = 200;
   let top = 0;
   Object.defineProperties(feed, {
     scrollHeight: { configurable: true, get: () => height },
-    clientHeight: { configurable: true, value: 200 },
-    scrollTop: { configurable: true, get: () => top, set: value => { top = Math.max(0, Math.min(value, height - 200)); } },
+    clientHeight: { configurable: true, get: () => viewport },
+    scrollTop: { configurable: true, get: () => top, set: value => { top = Math.max(0, Math.min(value, height - viewport)); } },
   });
   return {
     resize: (value: number) => { height = value; },
+    resizeViewport: (value: number) => { viewport = value; },
     scroll: (value: number) => { feed.scrollTop = value; feed.dispatchEvent(new Event('scroll', { bubbles: true })); },
   };
 }
@@ -31,10 +33,43 @@ vi.mock('../../../api/server/communityApi', () => ({
   createCommunityPost: mocks.create, editCommunityPost: vi.fn(), deleteCommunityPost: vi.fn(), likeCommunityPost: vi.fn(),
 }));
 
-beforeEach(() => { vi.resetAllMocks(); mocks.subscribe.mockReturnValue(mocks.close); });
-afterEach(async () => { await cleanupRenderComponents(); vi.useRealTimers(); });
+let onResize: () => void;
+const disconnectResize = vi.fn();
+beforeEach(() => {
+  vi.resetAllMocks();
+  mocks.subscribe.mockReturnValue(mocks.close);
+  vi.stubGlobal('ResizeObserver', class {
+    constructor(callback: () => void) { onResize = callback; }
+    observe() {}
+    disconnect = disconnectResize;
+  });
+});
+afterEach(async () => { await cleanupRenderComponents(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe('community panel lifecycle', () => {
+  it('keeps the latest message visible when the feed shrinks without pulling readers away from older messages', async () => {
+    let resolve!: (page: CommunityPage) => void;
+    mocks.fetch.mockImplementationOnce(() => new Promise<CommunityPage>(done => { resolve = done; }));
+    const props = { user: null, exchange: 'bitget', market: 'spot', symbol: 'BTCUSDT', onLogin: vi.fn() };
+    const view = await renderComponent(<CommunityPanel {...props} />);
+    const feed = view.container.querySelector<HTMLDivElement>('.community-feed')!;
+    const metrics = scrollMetrics(feed);
+    await act(async () => resolve(messagePage([3, 2, 1])));
+    expect(feed.scrollTop).toBe(800);
+
+    metrics.resizeViewport(100);
+    await act(async () => onResize());
+    expect(feed.scrollTop).toBe(900);
+    await act(async () => metrics.scroll(100));
+    metrics.resizeViewport(50);
+    await act(async () => onResize());
+    expect(feed.scrollTop).toBe(100);
+    expect(mocks.fetch).toHaveBeenCalledOnce();
+
+    await view.rerender(<CommunityPanel {...props} active={false} />);
+    expect(disconnectResize).toHaveBeenCalledOnce();
+  });
+
   it('shows oldest messages first and follows new messages only while reading the bottom', async () => {
     vi.useFakeTimers();
     let resolve!: (page: CommunityPage) => void;

@@ -10,6 +10,7 @@
 .community-header h3 { margin: 0; padding-bottom: 4px; border-bottom: 2px solid var(--text, #eaecef); font-size: 13px; font-weight: 700; }
 
 .community-feed { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 12px 0; display: flex; flex-direction: column; gap: 18px; }
+.community-feed > :first-child { margin-top: auto; }
 .community-post { display: flex; flex-shrink: 0; gap: 8px; align-items: flex-start; }
 .community-avatar { width: 28px; height: 28px; flex: 0 0 28px; border-radius: 50%; background: var(--surface2, #131313); color: var(--text, #eaecef); object-fit: cover; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; }
 .community-post:nth-child(6n + 2) > span.community-avatar { background: #3b3f4b; }
