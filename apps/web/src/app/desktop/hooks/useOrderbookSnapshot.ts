@@ -27,7 +27,7 @@ export function useOrderbookSnapshot({ symbol, exchange, isFutures, isKrw, liveP
   const setDepthScale: Dispatch<SetStateAction<DepthPrecision>> = (next) => {
     setDepthSelection((previous) => ({ marketKey, scale: typeof next === 'function' ? next(previous.scale) : next }));
   };
-  const { getTickDecimals } = usePricePrecision(2);
+  const { getTickDecimals } = usePricePrecision(2, exchange, isFutures ? 'futures' : 'spot');
   const orderbook = useOrderbook(symbol, depthScale, isFutures, active, exchange, false);
   const funding = useFundingRate(
     symbol,

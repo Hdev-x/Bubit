@@ -3,6 +3,7 @@ import { fetchCoinLogos } from '../../../api/server/marketApi';
 import { useCurrency } from '../../../shared/contexts/settingsContext';
 import { useCoinDetailChart } from '../../../chart/hooks/useCoinDetailChart';
 import { useMarketTickers } from '../../../hooks/market/useMarketTickers';
+import { getMarketPriceDecimals, priceDecimalPlaces } from '../../../shared/utils/coinFormatters';
 import { usePricePrecision } from '../../../hooks/market/usePricePrecision';
 import { useWatchlist } from '../../../hooks/account/useWatchlist';
 import type { CoinTicker } from '../../../shared/types/market';
@@ -107,10 +108,7 @@ export default function CoinListPage({ active = true, selectedSymbol, onSelectSy
   }, [activeSheet]);
 
   const getDecimals = useCallback((ticker: CoinTicker) => {
-    const key = (exchangeFilter === 'BINANCE' && productFilter === 'FUTURES')
-      ? 'BN_' + ticker.symbol
-      : ticker.symbol;
-    return precisionMap.get(key) ?? ticker.tickDecimals;
+    return getMarketPriceDecimals(precisionMap, exchangeFilter, productFilter === 'FUTURES' ? 'futures' : 'spot', ticker.symbol, Math.max(ticker.tickDecimals, priceDecimalPlaces(ticker.last)));
   }, [exchangeFilter, productFilter, precisionMap]);
 
   useEffect(() => {

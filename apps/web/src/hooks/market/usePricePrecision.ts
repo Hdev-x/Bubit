@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { fetchPricePrecision } from '../../api/server/marketApi';
+import type { ExchangeId } from '../../shared/constants/exchanges';
+import { getMarketPriceDecimals } from '../../shared/utils/coinFormatters';
 
-export function usePricePrecision(defaultDecimals = 4) {
+export function usePricePrecision(defaultDecimals = 4, exchange: ExchangeId = 'BITGET', market: 'spot' | 'futures' = 'futures') {
   const [precisionMap, setPrecisionMap] = useState<Map<string, number>>(new Map());
 
   // 서버가 차단·시간 초과로 빈 결과를 주면 60초 뒤 다시 받는다(최대 5회) — 예전엔 mount 시 1회뿐이라 기본 소수 자릿수로 굳었다
@@ -21,8 +23,8 @@ export function usePricePrecision(defaultDecimals = 4) {
   }, []);
 
   const getTickDecimals = useCallback((symbol: string) => {
-    return precisionMap.get(symbol) ?? defaultDecimals;
-  }, [defaultDecimals, precisionMap]);
+    return getMarketPriceDecimals(precisionMap, exchange, market, symbol, defaultDecimals);
+  }, [defaultDecimals, exchange, market, precisionMap]);
 
   return {
     precisionMap,

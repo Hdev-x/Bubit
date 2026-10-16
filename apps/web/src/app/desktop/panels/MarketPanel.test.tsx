@@ -8,14 +8,14 @@ const tickers: CoinTicker[] = Array.from({ length: 160 }, (_, i) => ({
   symbol: `COIN${String(i).padStart(3, '0')}USDT`, baseSymbol: `COIN${i}`, quoteSymbol: 'USDT',
   name: `Coin ${i}`, last: i + 1, change: 0, changeRate: 0, volume: 160 - i, tickDecimals: 2,
 }));
-const mocks = vi.hoisted(() => ({ futures: vi.fn(), spot: vi.fn(), bitget: vi.fn(), upbit: vi.fn(), subscribe: vi.fn() }));
+const mocks = vi.hoisted(() => ({ futures: vi.fn(), spot: vi.fn(), bitget: vi.fn(), upbit: vi.fn(), subscribe: vi.fn(), precision: new Map<string, number>() }));
 const deferred = <T,>() => { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done; }); return { promise, resolve }; };
 vi.mock('../../../api/server/marketApi', () => ({
   fetchBinanceFuturesTickers: mocks.futures, fetchBinanceSpotTickers: mocks.spot,
   fetchCoinFuturesTickers: mocks.bitget, fetchCoinTickers: vi.fn(), fetchCoinLogos: () => Promise.resolve({}),
 }));
 vi.mock('../../../api/exchange/krw/krwTickers', () => ({ fetchUpbitSpotTickers: mocks.upbit, fetchBithumbSpotTickers: vi.fn() }));
-vi.mock('../../../hooks/market/usePricePrecision', () => ({ usePricePrecision: () => ({ precisionMap: new Map() }) }));
+vi.mock('../../../hooks/market/usePricePrecision', () => ({ usePricePrecision: () => ({ precisionMap: mocks.precision }) }));
 vi.mock('../../../api/server/coinRealtime', () => ({
   subscribeBitgetSpotTickers: mocks.subscribe, subscribeBitgetFuturesTickers: mocks.subscribe,
   subscribeBinanceSpotTickers: mocks.subscribe, subscribeBinanceFuturesTickers: mocks.subscribe,
@@ -25,7 +25,7 @@ vi.mock('../../../api/exchange/krw/krwRealtime', () => ({ subscribeKrwTickers: m
 let MarketPanel: typeof import('./MarketPanel').MarketPanel;
 let FavoritesPanel: typeof import('./FavoritesPanel').FavoritesPanel;
 beforeEach(async () => {
-  vi.resetModules(); vi.resetAllMocks();
+  vi.resetModules(); vi.resetAllMocks(); mocks.precision.clear();
   const stored = new Map<string, string>();
   vi.stubGlobal('localStorage', { getItem: (key: string) => stored.get(key) ?? null, setItem: (key: string, value: string) => stored.set(key, value) });
   mocks.subscribe.mockReturnValue({ close: vi.fn() });
@@ -40,6 +40,28 @@ const click = async (container: HTMLElement, selector: string, label: string) =>
 const rows = (container: HTMLElement) => container.querySelectorAll('.wm-row:not(.wm-row-skel)');
 
 describe('MarketPanel loading and shared snapshots', () => {
+  it('거래량 낮은 순 Binance Spot은 현물 틱을 쓰고 WS에서도 작은 가격을 보존한다', async () => {
+    mocks.precision.set('IQUSDT', 2);
+    mocks.precision.set('BINANCE:FUTURES:IQUSDT', 2);
+    mocks.precision.set('BINANCE:SPOT:IQUSDT', 7);
+    mocks.precision.set('BINANCE:SPOT:MDBBUSDT', 8);
+    mocks.futures.mockResolvedValue([]);
+    mocks.spot.mockResolvedValue([
+      { ...tickers[0], symbol: 'IQUSDT', last: 0.0012345, volume: 20, tickDecimals: 2 },
+      { ...tickers[1], symbol: 'MDBBUSDT', last: 362.85, volume: 10, tickDecimals: 8 },
+    ]);
+    let onTicker!: (ticker: { symbol: string; price: number }) => void;
+    mocks.subscribe.mockImplementation((_symbols, callback) => { onTicker = callback; return { close: vi.fn() }; });
+    const view = await renderComponent(<MarketPanel active />);
+    await click(view.container, '.wm-tabs button', 'Spot');
+    await click(view.container, '.wm-colhead button', 'Volume');
+    expect([...view.container.querySelectorAll('.wm-row-price strong')].map(el => el.textContent))
+      .toEqual(['362.85', '0.0012345']);
+    act(() => onTicker({ symbol: 'IQUSDT', price: 0.0012346 }));
+    expect([...view.container.querySelectorAll('.wm-row-price strong')].map(el => el.textContent))
+      .toEqual(['362.85', '0.0012346']);
+  });
+
   it('1.5초가 지나도 조회 중에는 스켈레톤을 유지하고 실제 목록 도착 시 페이드한다', async () => {
     vi.useFakeTimers();
     const request = deferred<CoinTicker[]>(); mocks.futures.mockReturnValue(request.promise);

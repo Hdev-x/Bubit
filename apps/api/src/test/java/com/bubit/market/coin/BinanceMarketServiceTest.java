@@ -14,10 +14,46 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 
 class BinanceMarketServiceTest {
+
+    @Test
+    void spot_exchangeInfo는_guard_캐시와_차단을_공유하고_stale을_알린다() {
+        AtomicLong clock = new AtomicLong(1_000);
+        AtomicInteger calls = new AtomicInteger();
+        WebClient client = WebClient.builder().exchangeFunction(request -> {
+            assertEquals("/api/v3/exchangeInfo", request.url().getPath());
+            assertEquals("showPermissionSets=false", request.url().getQuery());
+            if (calls.incrementAndGet() > 1) return Mono.error(new IllegalStateException("upstream failed"));
+            return Mono.just(ClientResponse.create(HttpStatus.OK).header("Content-Type", MediaType.APPLICATION_JSON_VALUE)
+                    .body("{\"symbols\":[{\"symbol\":\"BTCUSDT\",\"filters\":[]}]}").build());
+        }).build();
+        BinanceRestGuard guard = new BinanceRestGuard(clock::get);
+        BinanceMarketService service = new BinanceMarketService(mock(BinanceSpotRealtimeWebSocketService.class),
+                mock(BinanceFuturesRealtimeWebSocketService.class), guard, client, client);
+
+        BinanceRestGuard.Result fresh = service.getBinanceSpotExchangeInfoWithMeta();
+        assertFalse(fresh.stale());
+        assertEquals(fresh, service.getBinanceSpotExchangeInfoWithMeta());
+        assertEquals(1, calls.get());
+
+        clock.addAndGet(3_600_000);
+        guard.noteRateLimit(418, "60");
+        BinanceRestGuard.Result blocked = service.getBinanceSpotExchangeInfoWithMeta();
+        assertTrue(blocked.stale());
+        assertEquals(fresh.data(), blocked.data());
+        assertEquals(1, calls.get(), "공유 guard 차단 중에는 exchangeInfo를 다시 호출하지 않는다");
+
+        clock.addAndGet(61_000);
+        BinanceRestGuard.Result failed = service.getBinanceSpotExchangeInfoWithMeta();
+        assertTrue(failed.stale());
+        assertEquals(fresh.data(), failed.data());
+        assertEquals(2, calls.get());
+    }
 
     private static Map<String, Object> snap(double price, long receivedAt) {
         Map<String, Object> m = new HashMap<>();

@@ -1,10 +1,26 @@
+import type { ExchangeId } from '../constants/exchanges';
+
 export type ProductFilter = 'SPOT' | 'FUTURES';
 
 export function formatPriceWithDecimals(value: number, decimals: number) {
   return value.toLocaleString(undefined, {
-    minimumFractionDigits: decimals,
+    minimumFractionDigits: Math.min(2, decimals),
     maximumFractionDigits: decimals,
   });
+}
+
+// 메타데이터가 없을 때만 실제 가격의 유효 소수 자릿수를 사용한다.
+export function priceDecimalPlaces(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  const [coefficient, exponent = '0'] = String(value).toLowerCase().split('e');
+  return Math.max(0, (coefficient.split('.')[1]?.length ?? 0) - Number(exponent));
+}
+
+export function getMarketPriceDecimals(
+  precisionMap: ReadonlyMap<string, number>, exchange: ExchangeId,
+  market: 'spot' | 'futures', symbol: string, fallback: number,
+): number {
+  return precisionMap.get(`${exchange}:${market.toUpperCase()}:${symbol}`) ?? fallback;
 }
 
 export function formatRate(rate: number) {

@@ -6,6 +6,7 @@ import {
   subscribeBinanceSpotTickers, subscribeBinanceFuturesTickers,
   type RealtimeTicker,
 } from '../../../api/server/coinRealtime';
+import { getMarketPriceDecimals, priceDecimalPlaces } from '../../../shared/utils/coinFormatters';
 import { usePricePrecision } from '../../../hooks/market/usePricePrecision';
 import { useMarketTickerLists } from '../../../hooks/market/useMarketTickerLists';
 import { refreshTickerList, type TickerListKey } from '../../../api/server/marketTickerLists';
@@ -39,7 +40,7 @@ export function FavoritesPanel({ active, onSelect, editMode = false }: { active:
   const [liveMap, setLiveMap] = useState<Record<string, RealtimeTicker>>({});
   const [wasActive, setWasActive] = useState(active);
   const { precisionMap } = usePricePrecision();
-  const getDecimals = useCallback((t: CoinTicker) => precisionMap.get(t.symbol) ?? t.tickDecimals, [precisionMap]);
+  const getDecimals = useCallback((t: CoinTicker, exchange: ExchangeId, market: Market) => getMarketPriceDecimals(precisionMap, exchange, market, t.symbol, Math.max(t.tickDecimals, priceDecimalPlaces(t.last))), [precisionMap]);
 
   const favsKey = favs.join(',');
 
@@ -164,7 +165,7 @@ export function FavoritesPanel({ active, onSelect, editMode = false }: { active:
                 key={key}
                 ticker={t}
                 market={market}
-                decimals={getDecimals(t)}
+                decimals={getDecimals(t, exchange, market)}
                 faved={isFav(exchange, t.symbol, market)}
                 onToggleFav={() => toggleFav(exchange, t.symbol, market)}
                 onClick={() => onSelect?.(t.symbol, market, exchange)}

@@ -3,12 +3,12 @@ import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanupRenderComponents, renderComponent } from '../../../test/renderComponent';
 import type { CoinTicker } from '../../../shared/types/market';
-const mocks = vi.hoisted(() => ({ spot: vi.fn(), futures: vi.fn(), bitget: vi.fn(), subscribe: vi.fn() }));
+const mocks = vi.hoisted(() => ({ spot: vi.fn(), futures: vi.fn(), bitget: vi.fn(), subscribe: vi.fn(), precision: new Map<string, number>() }));
 vi.mock('../../../api/server/marketApi', () => ({
   fetchBinanceSpotTickers: mocks.spot, fetchBinanceFuturesTickers: mocks.futures,
   fetchCoinFuturesTickers: mocks.bitget, fetchCoinTickers: vi.fn(), fetchCoinLogos: () => Promise.resolve({}),
 }));
-vi.mock('../../../hooks/market/usePricePrecision', () => ({ usePricePrecision: () => ({ precisionMap: new Map() }) }));
+vi.mock('../../../hooks/market/usePricePrecision', () => ({ usePricePrecision: () => ({ precisionMap: mocks.precision }) }));
 vi.mock('../../../api/server/coinRealtime', () => ({
   subscribeBitgetSpotTickers: mocks.subscribe, subscribeBitgetFuturesTickers: mocks.subscribe,
   subscribeBinanceSpotTickers: mocks.subscribe, subscribeBinanceFuturesTickers: mocks.subscribe,
@@ -18,7 +18,7 @@ const ticker = (symbol: string): CoinTicker => ({ symbol, baseSymbol: symbol.rep
 const deferred = <T,>() => { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done; }); return { promise, resolve }; };
 let FavoritesPanel: typeof import('./FavoritesPanel').FavoritesPanel;
 beforeEach(async () => {
-  vi.resetModules(); vi.resetAllMocks();
+  vi.resetModules(); vi.resetAllMocks(); mocks.precision.clear();
   const stored = new Map<string, string>();
   vi.stubGlobal('localStorage', { getItem: (key: string) => stored.get(key) ?? null, setItem: (key: string, value: string) => stored.set(key, value) }); mocks.subscribe.mockReturnValue({ close: vi.fn() });
   ({ FavoritesPanel } = await import('./FavoritesPanel'));
@@ -30,6 +30,21 @@ const saveFavorites = (keys: string[]) => {
 };
 
 describe('FavoritesPanel immediate rows', () => {
+  it('같은 심볼도 거래소·현선물 틱을 구분하고 메타데이터 없이 받은 WS 소액 가격을 보존한다', async () => {
+    saveFavorites(['BINANCE|spot|IQUSDT', 'BITGET|futures|IQUSDT', 'BINANCE|spot|NEWUSDT']);
+    mocks.precision.set('IQUSDT', 2);
+    mocks.precision.set('BINANCE:SPOT:IQUSDT', 7);
+    mocks.precision.set('BITGET:FUTURES:IQUSDT', 4);
+    mocks.spot.mockResolvedValue([{ ...ticker('IQUSDT'), last: 0.0012345 }]);
+    mocks.bitget.mockResolvedValue([{ ...ticker('IQUSDT'), last: 0.0012 }]);
+    const callbacks: Array<(ticker: { symbol: string; price: number }) => void> = [];
+    mocks.subscribe.mockImplementation((_symbols, callback) => { callbacks.push(callback); return { close: vi.fn() }; });
+    const view = await renderComponent(<FavoritesPanel active />);
+    act(() => callbacks[0]({ symbol: 'NEWUSDT', price: 0.00000123 }));
+    expect([...view.container.querySelectorAll('.wm-row-price strong')].map(el => el.textContent))
+      .toEqual(['0.0012345', '0.0012', '0.00000123']);
+  });
+
   it('첫 조회 대기에도 종목이 즉시 보이며 REST보다 먼저 도착한 WS 가격을 표시한다', async () => {
     vi.useFakeTimers();
     saveFavorites(['broken', 'BINANCE|spot|BTCUSDT']);

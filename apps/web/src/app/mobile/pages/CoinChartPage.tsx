@@ -203,12 +203,8 @@ export default function CoinChartPage({ active = true, routeActive = true, canUs
   };
   const isFutures = !!productType;
   
-  const { precisionMap, getTickDecimals } = usePricePrecision(tickDecimals);
-  const actualTickDecimals = useMemo(() => {
-    if (precisionMap.size === 0) return tickDecimals;
-    const key = (isBinance && isFutures) ? 'BN_' + symbol : symbol;
-    return getTickDecimals(key);
-  }, [getTickDecimals, precisionMap, isBinance, isFutures, symbol, tickDecimals]);
+  const { getTickDecimals } = usePricePrecision(tickDecimals, exchange, isFutures ? 'futures' : 'spot');
+  const actualTickDecimals = getTickDecimals(symbol);
 
   const loadCandles = useCandleLoader({ symbol, productType, exchange });
   const [hoveredCandle, setHoveredCandle] = useState<{ key: string; candle: Candle | null } | null>(null);

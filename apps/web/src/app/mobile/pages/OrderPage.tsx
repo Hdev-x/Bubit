@@ -118,7 +118,7 @@ export default function OrderPage({ symbol, active, onSelectSymbol, onProductTyp
     setDepthScale('scale2');
   }
   if (!isFuturesMarket && depthScale === 'scale3') setDepthScale('scale2');
-  const { getTickDecimals } = usePricePrecision(2);
+  const { getTickDecimals } = usePricePrecision(2, 'BITGET', isFuturesMarket ? 'futures' : 'spot');
   const realtimePrices = useRealtimePrices(active ? [symbol] : [], isFuturesMarket); // 가운데 현재가용 실시간 시세 — 탭에 맞는 선물/현물 티커 (비활성 시 구독 해제)
 
   // 하단 탭 상태 및 옵션

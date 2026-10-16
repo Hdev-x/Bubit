@@ -2,6 +2,7 @@ import axios from 'axios';
 import { AxiosHeaders } from 'axios';
 import type { Candle, CoinTicker } from '../../shared/types/market';
 import { unwrapList, type CandleRow, type ExtraStatsResponse, type ListEnvelope, type RawTickerRow } from '../../shared/types/api';
+import { priceDecimalPlaces } from '../../shared/utils/coinFormatters';
 import { isRecord } from '../../shared/utils/guards';
 import { getToken } from '../client';
 
@@ -32,15 +33,6 @@ function toNumber(value: unknown) {
   }
 
   return 0;
-}
-
-function extractDecimals(value: unknown): number {
-  if (typeof value !== 'string') return 2;
-  const dot = value.indexOf('.');
-  if (dot === -1) return 0;
-  const decimals = value.length - dot - 1;
-  // 거래소는 trailing zero를 포함해 tick size 자리수만큼 내려주므로 그대로 사용
-  return Math.max(0, decimals);
 }
 
 function getCoinName(baseSymbol: string) {
@@ -111,8 +103,8 @@ function normalizeCoinTickers(
       const baseCoin = String(row.baseCoin || '');
       const quoteCoin = String(row.quoteCoin || '');
       const rawPrice = row.lastPr ?? row.lastPrice ?? row.last ?? row.close;
-      const tickDecimals = extractDecimals(rawPrice);
       const last = toNumber(rawPrice);
+      const tickDecimals = priceDecimalPlaces(last);
       const openUtc = toNumber(row.openUtc);
       const rawChangeRate = toNumber(row.changeUtc24h ?? row.change24h ?? row.priceChangePercent);
       const changeRate = source === 'BINANCE' ? rawChangeRate / 100 : rawChangeRate;
