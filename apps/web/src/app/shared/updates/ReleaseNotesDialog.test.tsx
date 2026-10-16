@@ -21,10 +21,10 @@ describe('ReleaseNotesDialog', () => {
     const view = await renderComponent(<ReleaseNotesDialog onClose={vi.fn()} />);
     expect(HTMLDialogElement.prototype.showModal).toHaveBeenCalledOnce();
     expect(Array.from(view.container.querySelectorAll('article h3'), heading => heading.textContent))
-      .toEqual(['v0.2.0', 'v0.1.0']);
+      .toEqual(['v0.2.1', 'v0.2.0', 'v0.1.0']);
     expect(view.container.querySelectorAll('.release-notes-badge')).toHaveLength(1);
     expect(view.container.querySelector('article')?.textContent).toContain('최신 버전');
-    expect(view.container.querySelectorAll('time[datetime="2026-10-16"]')).toHaveLength(2);
+    expect(view.container.querySelectorAll('time[datetime="2026-10-16"]')).toHaveLength(3);
   });
 
   it('supports cancel, backdrop and close while ignoring clicks inside the content', async () => {
